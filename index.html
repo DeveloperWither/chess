@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0c11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chess">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Chess Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="walnut">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gw" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d3d8df"/></linearGradient>
+    <linearGradient id="gb" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#555b66"/><stop offset=".55" stop-color="#23272e"/><stop offset="1" stop-color="#0d0f12"/></linearGradient>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="brand">
+    <span class="logo">♞</span>
+    <div><b>Chess Studio</b><small>STOCKFISH POWERED</small></div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-mode="play" class="on">♟ Play</button>
+    <button data-mode="review">📊 Game Review</button>
+    <button data-mode="puzzle">🧩 Puzzles</button>
+  </nav>
+  <div class="tools">
+    <div class="swatches" id="swatches"></div>
+    <button class="icon-btn" id="soundBtn" title="Toggle sound">🔊</button>
+  </div>
+</header>
+
+<main class="app">
+  <section class="stage">
+    <div class="pcard" id="pTop"></div>
+    <div class="board-row">
+      <div class="evalbar" id="evalbar"><div class="fill" id="evalfill"></div><span class="evaltext bot" id="evaltext">0.0</span></div>
+      <div class="frame">
+        <div class="board" id="board"></div>
+        <svg class="arrows" id="arrows" viewBox="0 0 8 8"></svg>
+      </div>
+    </div>
+    <div class="pcard" id="pBot"></div>
+  </section>
+
+  <aside class="panel">
+    <!-- ================= PLAY ================= -->
+    <div class="view" id="playView">
+      <div class="card">
+        <div class="status" id="status">Loading engine…</div>
+        <div class="field">
+          <label>PLAY AS</label>
+          <div class="seg" id="sideSeg">
+            <button data-side="w" class="on">♔ White</button>
+            <button data-side="b">♚ Black</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>STOCKFISH STRENGTH</label>
+          <select id="level">
+            <option value="0">Beginner (~800)</option>
+            <option value="1">Casual (~1200)</option>
+            <option value="2">Club (~1600)</option>
+            <option value="3">Expert (~2000)</option>
+            <option value="4">Master (~2400)</option>
+            <option value="5" selected>Grandmaster (3s / move)</option>
+            <option value="6">Maximum (8s / move)</option>
+          </select>
+        </div>
+        <div class="btn-grid">
+          <button class="btn primary" id="newBtn">✚ New game</button>
+          <button class="btn" id="undoBtn">↶ Undo</button>
+          <button class="btn" id="hintBtn">💡 Hint</button>
+          <button class="btn" id="flipBtn">⇅ Flip board</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h">Moves</div>
+        <div class="moves" id="moves"></div>
+        <div class="info" id="info"></div>
+      </div>
+      <button class="btn accent wide" id="reviewThisBtn">📊 Review this game</button>
+    </div>
+
+    <!-- ================= REVIEW ================= -->
+    <div class="view" id="reviewView" hidden>
+      <div class="view" id="rvImport">
+        <div class="card">
+          <div class="card-h">Analyze a game</div>
+          <div class="seg" id="srcSeg">
+            <button data-src="cc" class="on">Chess.com</button>
+            <button data-src="pgn">Paste PGN</button>
+          </div>
+          <div id="srcCC">
+            <div class="inrow">
+              <input id="ccUser" placeholder="Your Chess.com username" autocomplete="off" spellcheck="false">
+              <button class="btn primary" id="ccLoad">Load games</button>
+            </div>
+          </div>
+          <div id="srcPGN" hidden>
+            <textarea id="pgnIn" placeholder="Paste a PGN here (from Chess.com: Share → PGN → Copy)"></textarea>
+            <button class="btn primary wide" id="pgnLoad" style="margin-top:8px">Analyze PGN</button>
+          </div>
+          <div class="field">
+            <label>ANALYSIS DEPTH</label>
+            <div class="seg" id="qSeg">
+              <button data-q="0">⚡ Fast</button>
+              <button data-q="1" class="on">⚖ Balanced</button>
+              <button data-q="2">🔬 Deep</button>
+            </div>
+          </div>
+          <div class="msg" id="ccMsg"></div>
+        </div>
+        <div class="games" id="gameList"></div>
+      </div>
+
+      <div class="view" id="rvGame" hidden>
+        <div class="card">
+          <div class="game-h">
+            <button class="icon-btn" id="rvBack" title="Back to game list">←</button>
+            <div class="game-title" id="rvTitle"></div>
+          </div>
+          <div class="progress" id="rvProg"><div class="bar" id="rvBar"></div><span id="rvProgTxt"></span></div>
+          <div class="graph" id="graph"></div>
+        </div>
+
+        <div class="card" id="rvSummary"></div>
+
+        <div class="view" id="rvMoves" hidden>
+          <div class="card coach" id="coach"></div>
+          <div class="nav">
+            <button class="btn" id="navFirst" title="Start (Home)">⏮</button>
+            <button class="btn" id="navPrev" title="Previous (←)">◀</button>
+            <button class="btn primary" id="navNext" title="Next (→)">▶</button>
+            <button class="btn" id="navLast" title="End (End)">⏭</button>
+            <button class="btn" id="navFlip" title="Flip (F)">⇅</button>
+          </div>
+          <div class="card"><div class="moves review" id="rvMoveList"></div></div>
+          <div class="row">
+            <button class="btn" id="rvSummaryBtn">📋 Summary</button>
+            <button class="btn" id="playHereBtn">♟ Play from here</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ================= PUZZLES ================= -->
+    <div class="view" id="puzzleView" hidden>
+      <div class="card">
+        <div class="pz-stats">
+          <div><span class="pz-num" id="pzRating">1000</span><span class="pz-lbl">Puzzle rating</span></div>
+          <div><span class="pz-num" id="pzStreak">0</span><span class="pz-lbl">Streak 🔥</span></div>
+          <div><span class="pz-num" id="pzSolved">0</span><span class="pz-lbl">Solved</span></div>
+        </div>
+        <div class="field">
+          <label>DIFFICULTY</label>
+          <div class="levels" id="pzLevels"></div>
+        </div>
+      </div>
+      <div class="card pz-status" id="pzStatus"><div class="pz-s"><span class="spin"></span> Loading puzzles…</div></div>
+      <div class="btn-grid">
+        <button class="btn" id="pzHint" title="Using a hint counts as a miss">💡 Hint</button>
+        <button class="btn" id="pzSol" title="Counts as a miss">👁 Solution</button>
+        <button class="btn" id="pzRetry">↻ Retry</button>
+        <button class="btn primary" id="pzNext">Next puzzle ⏭</button>
+      </div>
+      <div class="card">
+        <div class="ana-h"><button class="btn wide" id="anaBtn">🔬 Analyze position</button></div>
+        <div id="anaBody" hidden>
+          <div class="ana-top"><span class="card-h">Stockfish lines</span><span class="info" id="anaDepth"></span></div>
+          <div class="alines" id="anaLines"></div>
+          <div class="row" style="margin-top:8px"><button class="btn" id="anaUndo">↶ Back</button><button class="btn" id="anaReset">⟲ Reset</button><button class="btn" id="pzFlip">⇅ Flip</button></div>
+          <div class="pz-s" style="margin-top:6px">Move pieces for either side to explore. Click a line to play it.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ana-top"><span class="card-h">Recent puzzles</span><button class="linkbtn" id="pzReset">Reset progress</button></div>
+        <div class="pz-hist" id="pzHist"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+<div class="promo" id="promo"><div id="promoChoices"></div></div>
+
+<script src="chess.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
