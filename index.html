@@ -34,9 +34,14 @@
     <button data-mode="play" class="on">♟ Play</button>
     <button data-mode="review">📊 Game Review</button>
     <button data-mode="puzzle">🧩 Puzzles</button>
+    <button data-mode="opening">📖 Openings</button>
+    <button data-mode="vision">👁 Vision</button>
+    <button data-mode="endgame">♔ Endgames</button>
+    <button data-mode="online">🌐 Online</button>
   </nav>
   <div class="tools">
     <div class="swatches" id="swatches"></div>
+    <button class="acct-btn" id="acctBtn" title="Your account">👤 Log in</button>
     <button class="icon-btn" id="soundBtn" title="Toggle sound">🔊</button>
   </div>
 </header>
@@ -188,11 +193,122 @@
         <div class="pz-hist" id="pzHist"></div>
       </div>
     </div>
+    <!-- ================= OPENINGS ================= -->
+    <div class="view" id="openingView" hidden>
+      <div class="card">
+        <div class="seg" id="opSeg"></div>
+        <div class="pz-s" id="opBlurb"></div>
+        <div class="field">
+          <label>TRAINING MODE</label>
+          <div class="seg" id="opModeSeg">
+            <button data-m="basics">📚 Basics</button>
+            <button data-m="learn">📖 Learn</button>
+            <button data-m="practice">🎯 Practice</button>
+            <button data-m="drill">🎲 Drill</button>
+          </div>
+          <div class="pz-s" id="opModeInfo" style="margin-top:6px"></div>
+        </div>
+        <div class="op-opts">
+          <label class="op-opt" id="opLevelRow">After the book, Stockfish plays at <select id="opLevel"></select></label>
+          <label class="op-opt" id="opSurpriseRow"><input type="checkbox" id="opSurprise"> Opponent sometimes plays surprise moves</label>
+        </div>
+      </div>
+      <div class="card pz-status" id="opStatus"></div>
+      <div class="btn-grid">
+        <button class="btn" id="opHint">💡 Hint</button>
+        <button class="btn" id="opRestart">↻ Restart line</button>
+        <button class="btn" id="opReview" title="Analyze this game in Game Review">📊 Review game</button>
+        <button class="btn primary" id="opNext">Next line ⏭</button>
+      </div>
+      <div class="card" id="opMovesCard">
+        <div class="card-h">Moves</div>
+        <div class="moves" id="opMoves" style="min-height:60px;max-height:150px"></div>
+      </div>
+      <div class="card">
+        <div class="ana-top"><span class="card-h" id="opLinesTitle">Lines</span><span class="info" id="opProg"></span></div>
+        <div class="op-lines" id="opLines"></div>
+        <button class="linkbtn" id="opReset" style="align-self:flex-end">Reset opening progress</button>
+      </div>
+    </div>
+    <!-- ================= VISION ================= -->
+    <div class="view" id="visionView" hidden>
+      <div class="card">
+        <div class="card-h">Vision &amp; coordinate trainer</div>
+        <div class="levels v-drills" id="vDrills"></div>
+        <div class="pz-s" id="vHow"></div>
+        <div class="op-opts" id="vSideRow">
+          <div class="op-opt">Board from <div class="seg" id="vSide" style="flex:1"><button data-s="w">White</button><button data-s="b">Black</button><button data-s="r">Random</button></div></div>
+          <label class="op-opt"><input type="checkbox" id="vCoords"> Show coordinates (easier)</label>
+        </div>
+      </div>
+      <div class="card pz-status play" id="vStatus"></div>
+    </div>
+
+    <!-- ================= ENDGAMES ================= -->
+    <div class="view" id="endgameView" hidden>
+      <div class="card pz-status" id="egStatus"></div>
+      <div class="btn-grid">
+        <button class="btn" id="egHint">💡 Hint</button>
+        <button class="btn" id="egRestart">↻ Restart</button>
+        <button class="btn" id="egShow">📊 Show tablebase</button>
+        <button class="btn" id="egFlip">⇅ Flip</button>
+      </div>
+      <div class="card" id="egTb" hidden></div>
+      <div class="card">
+        <div class="ana-top"><span class="card-h">Endgames</span><span class="info" id="egProg"></span></div>
+        <div class="op-lines" id="egList"></div>
+      </div>
+      <div class="card">
+        <div class="card-h">Tablebase explorer</div>
+        <div class="pz-s">Perfect results for any position with up to 7 pieces (Lichess Syzygy tablebase, needs internet).</div>
+        <div class="inrow"><input id="egFen" placeholder="Paste a FEN" autocomplete="off" spellcheck="false"><button class="btn primary" id="egLoad">Explore</button></div>
+        <div class="row"><button class="btn" id="egFromHere">This position</button><button class="btn" id="egFromPlay">From Play tab</button></div>
+      </div>
+    </div>
+    <!-- ================= ONLINE ================= -->
+    <div class="view" id="onlineView" hidden>
+      <div class="card" id="onAccount"></div>
+      <div class="card" id="onInvites" hidden></div>
+      <div class="card" id="onDlg" hidden></div>
+      <div class="card pz-status" id="onGame" hidden></div>
+      <div class="btn-grid" id="onGameBtns" hidden>
+        <button class="btn" id="onResign">🏳 Resign</button>
+        <button class="btn" id="onCancel">✕ Cancel game</button>
+        <button class="btn" id="onReview">📊 Review</button>
+        <button class="btn" id="onClose">← Back to lists</button>
+      </div>
+      <div class="card" id="onGamesCard" hidden>
+        <div class="card-h">My games</div>
+        <div class="op-lines" id="onGames"></div>
+      </div>
+      <div class="card" id="onFriendsCard" hidden>
+        <div class="card-h">Friends</div>
+        <div class="inrow"><input id="onFriendName" placeholder="Friend's username" autocomplete="off" spellcheck="false"><button class="btn primary" data-on="addfriend">+ Add</button></div>
+        <div id="onFriends"></div>
+      </div>
+    </div>
   </aside>
 </main>
+<div class="login" id="login" hidden>
+  <div class="login-box">
+    <div class="brand"><span class="logo">♞</span><div><b>Chess Studio</b><small>PLAY YOUR FRIENDS ONLINE</small></div></div>
+    <div class="seg" id="lgTabs"><button data-t="in" class="on">Log in</button><button data-t="new">Create account</button></div>
+    <label class="lg-l">Username <small>5–20 letters, numbers or _</small><input id="lgName" maxlength="20" autocomplete="username" spellcheck="false" autocapitalize="off"></label>
+    <label class="lg-l">Password <small>at least 8 characters</small><input id="lgPass" type="password" autocomplete="current-password"></label>
+    <label class="lg-l" id="lgPass2Row" hidden>Repeat password<input id="lgPass2" type="password" autocomplete="new-password"></label>
+    <div class="lg-err" id="lgErr"></div>
+    <button class="btn primary wide" id="lgGo">Log in</button>
+    <button class="linkbtn" id="lgSkip">Skip — play offline without an account</button>
+  </div>
+</div>
 <div class="promo" id="promo"><div id="promoChoices"></div></div>
 
 <script src="chess.min.js"></script>
+<script src="openings.js"></script>
 <script src="app.js"></script>
+<script src="vision.js"></script>
+<script src="endgames.js"></script>
+<script src="firebase-config.js"></script>
+<script src="online.js"></script>
 </body>
 </html>

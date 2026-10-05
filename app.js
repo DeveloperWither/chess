@@ -157,7 +157,7 @@ function matBal(c, color) {
 // Board renderer
 // ======================================================================
 let mode = 'play';
-const flip = { play: false, review: false, puzzle: false };
+const flip = { play: false, review: false, puzzle: false, opening: false };
 const isFlipped = () => flip[mode];
 const boardEl = $('board');
 function squareName(r, c) {
@@ -191,7 +191,8 @@ const KINFO = {
 };
 const KORDER = ['brilliant', 'great', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'miss', 'blunder'];
 
-function drawBoard({ pos, last, sel, targets = [], badge, arrows = [], anim }) {
+function drawBoard({ pos, last, sel, targets = [], badge, arrows = [], marks = [], tints = {}, coords = true, blind = false, anim }) {
+  boardEl.classList.toggle('blind', blind);
   boardEl.innerHTML = '';
   const inCheck = pos.in_check(), turn = pos.turn();
   const frag = document.createDocumentFragment();
@@ -203,12 +204,14 @@ function drawBoard({ pos, last, sel, targets = [], badge, arrows = [], anim }) {
     const p = pos.get(sq);
     if (last && (last.from === sq || last.to === sq)) el.classList.add('last');
     if (sel === sq) el.classList.add('sel');
+    if (marks.includes(sq)) el.classList.add('mark');
+    if (tints[sq]) el.classList.add('tint-' + tints[sq]);
     if (inCheck && p && p.type === 'k' && p.color === turn) el.classList.add('check');
     const t = targets.find(m => m.to === sq);
     if (t) { el.classList.add('hint'); if (p || t.flags.includes('e')) el.classList.add('cap'); }
     let html = '';
-    if (c === 0) html += `<span class="coord r">${sq[1]}</span>`;
-    if (r === 7) html += `<span class="coord f">${sq[0]}</span>`;
+    if (coords && c === 0) html += `<span class="coord r">${sq[1]}</span>`;
+    if (coords && r === 7) html += `<span class="coord f">${sq[0]}</span>`;
     if (p) html += pieceSVG(p.color, p.type);
     if (badge && badge.sq === sq) html += `<div class="badge k-${badge.kind}">${KINFO[badge.kind].sym}</div>`;
     el.innerHTML = html;
@@ -255,8 +258,8 @@ function capturedHTML(pos) {
   }
   return out;
 }
-function renderCards(pos, info) {
-  const caps = capturedHTML(pos), topC = isFlipped() ? 'w' : 'b', botC = topC === 'w' ? 'b' : 'w';
+function renderCards(pos, info, showCaps = true) {
+  const caps = showCaps ? capturedHTML(pos) : { w: '', b: '' }, topC = isFlipped() ? 'w' : 'b', botC = topC === 'w' ? 'b' : 'w';
   const card = c => {
     const p = info[c];
     return `<div class="avatar ${c}">${esc(p.av)}</div><div><div class="pname">${esc(p.name)}${p.elo ? `<small>(${esc(p.elo)})</small>` : ''}${p.toMove ? '' : ''}</div>
@@ -382,11 +385,14 @@ const playCtl = {
   pos: () => game, draw: () => drawPlay(), move: (f, t, anim) => tryUserMove(f, t, anim),
   canPick: p => p.color === playerColor && game.turn() === playerColor && !thinkJob && !game.game_over(),
 };
-const ctl = () => (mode === 'play' ? playCtl : mode === 'puzzle' ? puzzleCtl : null);
+// Tabs defined in their own files register { view, ctl, draw, init, enter, leave, flip } here.
+const EXTRA_MODES = {};
+const ctl = () => (mode === 'play' ? playCtl : mode === 'puzzle' ? puzzleCtl : mode === 'opening' ? opCtl : EXTRA_MODES[mode] ? EXTRA_MODES[mode].ctl : null);
 boardEl.addEventListener('pointerdown', e => {
   const C = ctl(); if (!C || e.button > 0) return;
   const sqEl = e.target.closest('.sq'); if (!sqEl) return;
   const sq = sqEl.dataset.sq, p = C.pos().get(sq);
+  if (C.click && C.click(sq)) return;
   if (selected && selected !== sq && C.move(selected, sq, true)) return;
   if (p && C.canPick(p)) {
     selected = sq; C.draw();
@@ -505,9 +511,13 @@ async function analyzeAll(token) {
     let ev = terminalEval(R.fens[k]);
     if (!ev) {
       const legal = new Chess(R.fens[k]).moves().length;
-      const r = await runJob(R.fens[k], { multipv: legal > 1 ? 2 : 1, movetime: q.time, depth: legal > 1 ? q.depth : 6, skill: 20 }, token);
+      const r = await runJob(R.fens[k], { multipv: legal > 1 ? 2 : 1, movetime: q.time, depth: legal > 1 ? q.depth : 6, skill: 20 }, token)
+        // the engine keeps crashing on this position: skip it (reuse the previous eval) instead of freezing the whole review
+        || (token === R.token ? { lines: [], bestmove: null, skipped: true } : null);
       if (!r) return;
-      const l0 = r.lines[0];
+      if (r.skipped) console.warn('review: skipped position', k, R.fens[k]);
+      const prev = R.evals[k - 1];
+      const l0 = r.lines[0] || (r.skipped && prev ? { score: { cp: prev.cp, mate: prev.mate }, pv: [], depth: 0 } : null);
       ev = l0 ? { cp: l0.score.cp, mate: l0.score.mate, pv: l0.pv, best: r.bestmove || l0.pv[0], second: r.lines[1] ? r.lines[1].score : null, depth: l0.depth }
               : { cp: 0, mate: null, pv: [], best: r.bestmove };
       // Score the move actually played from the same root and depth (avoids side-to-move eval bias).
@@ -517,18 +527,19 @@ async function analyzeAll(token) {
         if (hit) ev.played = { cp: hit.score.cp, mate: hit.score.mate, pv: hit.pv };
         else {
           const r2 = await runJob(R.fens[k], { multipv: 1, movetime: q.time, depth: q.depth, skill: 20, searchmoves: mv.uci }, token);
-          if (!r2) return;
-          const p = r2.lines[0];
+          if (!r2 && token !== R.token) return;
+          const p = r2 && r2.lines[0];
           if (p) ev.played = { cp: p.score.cp, mate: p.score.mate, pv: p.pv };
         }
       }
     }
     R.evals[k] = ev;
-    if (k > 0) R.cls[k - 1] = classify(k - 1);
+    if (k > 0) { try { R.cls[k - 1] = classify(k - 1); } catch (e) { console.error('classify', e); R.cls[k - 1] = { kind: 'good', loss: 0, acc: 100, wb: 50, wa: 50 }; } }
     const done = k + 1, eta = Math.round((performance.now() - t0) / done * (n - done) / 1000);
     $('rvBar').style.width = (done / n * 100) + '%';
     $('rvProgTxt').textContent = done < n ? `Analyzing move ${Math.ceil(done / 2)} of ${Math.ceil(n / 2)} · ~${eta}s left` : '';
-    refreshReview(k);
+    // a drawing error must never stop the analysis
+    try { refreshReview(k); } catch (e) { console.error('review render', e); }
   }
   R.done = true;
   $('rvProg').hidden = true;
@@ -536,11 +547,22 @@ async function analyzeAll(token) {
   sfx('end');
 }
 
-async function runJob(fen, opts, token) {
+async function runJob(fen, opts, token, retry = true) {
   const job = reviewEngine.search(fen, opts);
   R.job = job;
-  const r = await job.promise;
+  // watchdog: if the engine hangs on a position, restart it and try once more
+  const limit = (opts.movetime || 5000) + 6000;
+  let timer;
+  const r = await Promise.race([job.promise, new Promise(res => (timer = setTimeout(() => res('timeout'), limit)))]);
+  clearTimeout(timer);
   if (R.job === job) R.job = null;
+  if (r === 'timeout') {
+    console.warn('review engine stalled — restarting it');
+    try { reviewEngine.w.terminate(); } catch {}
+    reviewEngine = new Engine();
+    try { await reviewEngine.ready; } catch { return null; }
+    return token === R.token && retry ? runJob(fen, opts, token, false) : null;
+  }
   return token !== R.token || !r || r.cancelled ? null : r;
 }
 // Score of the played move i (falls back to the next position's eval).
@@ -555,7 +577,8 @@ function playedOf(i) {
 function threatened(fen) {
   const c = new Chess(fen); let best = { net: 0 };
   for (const m of c.moves({ verbose: true })) {
-    if (!m.captured) continue;
+    // in a flipped-turn position the king can be "capturable" — taking it would break chess.js
+    if (!m.captured || m.captured === 'k') continue;
     const gain = VAL[m.captured];
     c.move(m);
     const recap = c.moves({ verbose: true }).some(r => r.to === m.to);
@@ -931,7 +954,7 @@ $('playHereBtn').onclick = () => {
 // ======================================================================
 // SAVED PROGRESS (browser storage + progress.json via serve.py)
 // ======================================================================
-let prog = { v: 1, rating: 1000, solved: {}, failed: {}, streak: 0, bestStreak: 0, hist: [], level: 'auto', curId: null, extra: [], play: null, tab: 'play', updated: 0 };
+let prog = { v: 1, rating: 1000, solved: {}, failed: {}, streak: 0, bestStreak: 0, hist: [], level: 'auto', curId: null, extra: [], play: null, tab: 'play', openings: {}, vision: {}, endgames: {}, opId: null, opMode: null, opLine: null, updated: 0 };
 async function loadProgress() {
   const local = store.get('progress', null);
   let remote = null;
@@ -1282,15 +1305,568 @@ $('pzReset').onclick = () => {
 };
 
 // ======================================================================
+// OPENINGS TRAINER (repertoires in openings.js)
+// ======================================================================
+const posKey = fen => fen.split(' ').slice(0, 4).join(' ');
+const sanToUci = (fen, san) => { const m = new Chess(fen).move(san, { sloppy: true }); return m ? m.from + m.to + (m.promotion || '') : null; };
+for (const op of OPENINGS) {
+  op.notes = {}; op.why = {}; op.book = {}; op.lines = [];
+  for (const g of op.groups) for (const l of g.lines) {
+    const c = new Chess(); l.moves = []; l.group = g.name; l.plan = l.plan || g.plan;
+    for (const t of l.pgn.matchAll(/\{([^}]*)\}|\[([^\]:]+):([^\]]*)\]|(\S+)/g)) {
+      if (t[1] !== undefined) { const m = l.moves[l.moves.length - 1]; if (m && !op.notes[m.key]) op.notes[m.key] = t[1].trim(); continue; }
+      if (t[2] !== undefined) { op.why[posKey(c.fen()) + '|' + t[2].trim()] = t[3].trim(); continue; }
+      const key = posKey(c.fen()), m = c.move(t[4], { sloppy: true });
+      if (!m) { console.warn('bad opening move', l.id, t[4]); break; }
+      const mv = { san: m.san, uci: m.from + m.to + (m.promotion || ''), key: key + '|' + m.san, color: m.color };
+      l.moves.push(mv);
+      const opts = (op.book[key] = op.book[key] || []);
+      let e = opts.find(x => x.san === mv.san);
+      if (!e) opts.push((e = { ...mv, lines: [] }));
+      e.lines.push(l);
+    }
+    l.endKey = posKey(c.fen());
+    op.lines.push(l);
+  }
+  for (const ls of op.lessons) for (const st of ls.steps) {
+    const c = new Chess();
+    for (const s of st.moves.split(/\s+/).filter(Boolean)) c.move(s, { sloppy: true });
+    st.fen = c.fen();
+    const h = c.history({ verbose: true }), lm = h[h.length - 1];
+    st.last = lm ? { from: lm.from, to: lm.to } : null;
+    if (st.task) st.taskUci = sanToUci(st.fen, st.task);
+  }
+}
+const noteOf = (op, mv) => op.notes[mv.key] || '';
+const moveLabel = (ply, san) => `${Math.floor(ply / 2) + 1}${ply % 2 ? '…' : '.'}${san}`;
+const MODE_INFO = {
+  basics: 'Short lessons: what the opening is about, the pawn structure, where pieces go, and the traps.',
+  learn: 'Follow the green arrow — every move is explained. When the book ends, keep playing vs Stockfish.',
+  practice: 'Play the line from memory. Wrong moves are explained; 💡 Hint if stuck. Then play on vs Stockfish.',
+  drill: 'The opponent picks ANY known reply at every move (and sometimes a surprise). Like a real game.',
+};
+const O = { op: null, mode: 'learn', line: null, lesson: 0, step: 0, pos: null, phase: 'book', state: 'idle', hint: 0, tries: 0,
+            miss: 0, used: false, wrong: false, last: null, badge: null, feed: [], token: 0, clean: false, coach: null,
+            hintMove: null, evalScore: null, level: 2, surprise: true, solved: false, pending: null, credited: [] };
+let opEngine = null, opJob = null;
+const opCtl = {
+  pos: () => O.pos || new Chess(), draw: () => drawOpening(), move: (f, t, anim) => opMove(f, t, null, anim),
+  canPick: p => O.state === 'play' && p.color === O.op.side && O.pos.turn() === O.op.side,
+};
+const opStat = id => prog.openings[id] || { learned: false, reps: 0, perfect: 0 };
+const userTurn = () => O.pos.turn() === O.op.side;
+const ply = () => O.pos.history().length;
+const themName = () => (O.op.side === 'b' ? 'White' : 'Black');
+const povScore = s => { const k = O.op.side === 'w' ? 1 : -1; return fmtScore({ cp: s.cp * k, mate: s.mate == null ? null : s.mate * k }); };
+
+function opSearch(fen, opts) {
+  if (!opEngine) opEngine = new Engine();
+  const job = opEngine.search(fen, opts);
+  opJob = job;
+  return job.promise.then(r => { if (opJob === job) opJob = null; return r && !r.cancelled ? r : null; });
+}
+function stopOpJob() { if (opJob) { opJob.cancel(); opJob = null; } }
+// Score the move `uci` against the engine's best (or against `refUci`) from the same root and depth.
+async function judge(fen, uci, refUci) {
+  const s = fen.split(' ')[1] === 'w' ? 1 : -1, after = new Chess(fen);
+  after.move(uciMove(uci));
+  const term = terminalEval(after.fen());
+  const ref = await opSearch(fen, refUci ? { depth: 12, movetime: 2000, searchmoves: refUci } : { depth: 12, movetime: 2000 });
+  if (!ref || !ref.lines[0]) return null;
+  const best = ref.lines[0];
+  let played = best;
+  if (term) played = { score: { cp: term.cp, mate: term.mate }, pv: [uci] };
+  else if (best.pv[0] !== uci) {
+    const r = await opSearch(fen, { depth: 12, movetime: 2000, searchmoves: uci });
+    if (!r || !r.lines[0]) return null;
+    played = r.lines[0];
+  }
+  return { best, played, loss: Math.max(0, winPct(best.score.cp * s) - winPct(played.score.cp * s)) };
+}
+// Plain-language reason why a move is worse than the alternative, using the engine lines.
+function whyText(fb, uci, j) {
+  const side = fb.split(' ')[1], s = side === 'w' ? 1 : -1, them = side === 'w' ? 'Black' : 'White', B = x => `<b>${x}</b>`;
+  const fa = (() => { const c = new Chess(fb); c.move(uciMove(uci)); return c.fen(); })();
+  const reply = j.played.pv.slice(1), replySans = pvSan(fa, reply, 6), T = [];
+  const ps = j.played.score, bs = j.best.score;
+  if (ps.mate != null && ps.mate * s < 0 && !(bs.mate != null && bs.mate * s < 0)) {
+    T.push(`This allows a forced checkmate: ${B(lineText(fa, replySans))}`);
+  } else if (bs.mate != null && bs.mate * s > 0 && !(ps.mate != null && ps.mate * s > 0)) {
+    T.push(`You had a forced checkmate: ${B(lineText(fb, pvSan(fb, j.best.pv, 6)))}`);
+  } else {
+    const played = materialSwing(fb, j.played.pv, side), best = materialSwing(fb, j.best.pv, side);
+    if (played.delta <= -2 && best.delta - played.delta >= 2) {
+      const t = threatened(fa);
+      if (t.net >= 2 && reply[0] && reply[0].slice(2, 4) === t.square) T.push(`It leaves your ${NAME[t.piece]} on ${t.square} unprotected — ${them} takes it with ${B(replySans[0])}.`);
+      else T.push(`It loses material: ${them} answers ${B(replySans[0])} and wins ${matWord(-played.delta, played.lostPiece)}. Line: ${B(lineText(fa, replySans))}`);
+    } else if (best.delta >= 2 && best.delta - played.delta >= 2) {
+      const fork = forkInfo(fb, j.best.pv[0]);
+      T.push(`It misses ${B(pvSan(fb, j.best.pv, 1)[0])}, which wins ${matWord(best.delta, best.wonPiece)}${fork ? ` — a fork of the ${fork}` : ''}.`);
+    } else {
+      const rFork = reply[0] && forkInfo(fa, reply[0]);
+      if (replySans[0]) T.push(rFork ? `${them} replies ${B(replySans[0])}, forking your ${rFork}.` : `${them}'s strongest reply is ${B(replySans[0])}${/\+/.test(replySans[0]) ? ' (check)' : ''}. Likely line: ${lineText(fa, replySans)}`);
+    }
+  }
+  T.push(`Stockfish rates your position ${B(povScore(bs))} → ${B(povScore(ps))} after this move (+ = good for you).`);
+  return T.map(t => `<p>${t}</p>`).join('');
+}
+// Why the engine likes a move (for hints after the book).
+function reasonFor(fen, line) {
+  const side = fen.split(' ')[1], s = side === 'w' ? 1 : -1, sans = pvSan(fen, line.pv, 6), B = x => `<b>${x}</b>`;
+  if (line.score.mate != null && line.score.mate * s > 0) return `It forces checkmate in ${Math.abs(line.score.mate)}: ${B(lineText(fen, sans))}`;
+  const sw = materialSwing(fen, line.pv, side), fork = forkInfo(fen, line.pv[0]);
+  if (fork) return `It forks the ${fork}! Line: ${lineText(fen, sans)}`;
+  if (sw.delta >= 2) return `It wins ${matWord(sw.delta, sw.wonPiece)}. Line: ${lineText(fen, sans)}`;
+  const t = threatened(withTurn(fen, side === 'w' ? 'b' : 'w'));
+  if (t.net >= 2) return `Your ${NAME[t.piece]} on ${t.square} is in danger — this deals with it. Line: ${lineText(fen, sans)}`;
+  return `Stockfish's top choice. Expected line: ${lineText(fen, sans)}`;
+}
+
+// ---------- Flow ----------
+function initOpenings() {
+  O.op = OPENINGS.find(o => o.id === prog.opId) || OPENINGS[0];
+  O.mode = prog.opV2 && MODE_INFO[prog.opMode] ? prog.opMode : 'basics';
+  prog.opV2 = true;
+  O.level = prog.opLevel ?? 2; O.surprise = prog.opSurprise ?? true;
+  $('opSeg').innerHTML = OPENINGS.map(o => `<button data-op="${o.id}">${o.icon} ${esc(o.name)}</button>`).join('');
+  $('opLevel').innerHTML = LEVELS.slice(0, 6).map((L, i) => `<option value="${i}">${L.name}</option>`).join('');
+  $('opLevel').value = O.level; $('opSurprise').checked = O.surprise;
+  if (O.mode === 'basics') startLesson(Math.min(prog.opLesson || 0, O.op.lessons.length - 1), 0);
+  else startTraining(O.op.lines.find(l => l.id === prog.opLine) || O.op.lines[0]);
+}
+function resetBoardState() {
+  O.token++; stopOpJob();
+  O.pos = new Chess(); O.phase = 'book'; O.hint = 0; O.tries = 0; O.miss = 0; O.used = false; O.wrong = false;
+  O.last = null; O.badge = null; O.feed = []; O.coach = null; O.hintMove = null; O.evalScore = null; O.pending = null;
+  O.solved = false; O.credited = []; selected = null;
+  flip.opening = O.op.side === 'b';
+}
+function startTraining(line) {
+  if (O.mode === 'basics') O.mode = 'learn';
+  resetBoardState();
+  O.line = O.mode === 'drill' ? null : line;
+  prog.opId = O.op.id; prog.opMode = O.mode; if (line) prog.opLine = line.id; saveProgress();
+  renderOpening(); drawOpening();
+  advance();
+}
+function expectedMove() {
+  if (O.line) return O.line.moves[ply()] || null;
+  return (O.op.book[posKey(O.pos.fen())] || []).find(m => m.color === O.op.side) || null;
+}
+function opponentOptions() {
+  if (O.line) { const m = O.line.moves[ply()]; return m ? [m] : []; }
+  return (O.op.book[posKey(O.pos.fen())] || []).filter(m => m.color !== O.op.side);
+}
+function advance() {
+  if (O.phase === 'free') return freeAdvance();
+  if (O.pos.game_over()) return bookComplete();
+  if (userTurn()) {
+    if (!expectedMove()) return bookComplete();
+    O.state = 'play'; renderOpStatus(); drawOpening(); return;
+  }
+  const opts = opponentOptions();
+  if (!opts.length) return bookComplete();
+  O.state = 'wait'; renderOpStatus();
+  const token = O.token;
+  setTimeout(async () => {
+    if (O.token !== token) return;
+    // Drill: sometimes leave the book with a sensible engine move, like a real opponent would.
+    if (O.mode === 'drill' && O.surprise && ply() >= 4 && Math.random() < 0.12) {
+      const fen = O.pos.fen(), r = await opSearch(fen, { depth: 10, movetime: 1200, multipv: 4 });
+      if (O.token !== token) return;
+      const s = O.pos.turn() === 'w' ? 1 : -1, book = new Set(opts.map(o => o.uci));
+      const cands = r ? r.lines.filter(l => l.pv[0] && !book.has(l.pv[0]) && (r.lines[0].score.cp - l.score.cp) * s < 80) : [];
+      if (cands.length) {
+        const pick = cands[Math.floor(Math.random() * cands.length)];
+        const m = O.pos.move(uciMove(pick.pv[0]));
+        O.feed.push({ who: 'surprise', label: moveLabel(ply() - 1, m.san), note: `Surprise! This move is not in your book — just like a real opponent might play. Now you have to think: what does it change, and does it leave anything loose? Use 💡 Hint if you want Stockfish's help.` });
+        O.last = { from: m.from, to: m.to }; O.badge = null;
+        if (mode === 'opening') moveSound(m);
+        drawOpening(moveAnim(m)); renderOpMoves();
+        enterFree(false);
+        return;
+      }
+    }
+    const ws = opts.map(o => (o.lines || []).reduce((a, l) => a + 4 - Math.min(3, opStat(l.id).perfect), 0) || 1);
+    let r = Math.random() * ws.reduce((a, b) => a + b, 0);
+    const mv = opts.find((o, i) => (r -= ws[i]) < 0) || opts[0];
+    const m = O.pos.move(mv.san);
+    O.feed.push({ who: 'them', label: moveLabel(ply() - 1, m.san), note: noteOf(O.op, mv) });
+    O.last = { from: m.from, to: m.to }; O.badge = null;
+    if (mode === 'opening') moveSound(m);
+    drawOpening(moveAnim(m)); renderOpMoves();
+    advance();
+  }, ply() === 0 ? 400 : O.mode === 'learn' ? 1000 : 650);
+}
+// The book has run out: credit the line, then Stockfish takes over.
+function bookComplete() {
+  const key = posKey(O.pos.fen());
+  const lines = O.line ? [O.line] : O.op.lines.filter(l => l.endKey === key);
+  O.clean = !O.miss && !O.used;
+  for (const l of lines) {
+    const p = (prog.openings[l.id] = { ...opStat(l.id), learned: true });
+    if (O.mode !== 'learn') { p.reps++; if (O.clean) p.perfect++; }
+  }
+  O.credited = lines; saveProgress(); sfx('right');
+  const l = lines[0];
+  const stars = l ? Math.min(3, opStat(l.id).perfect) : 0;
+  const how = O.mode === 'learn' ? 'Line learned — next time try it in 🎯 Practice.'
+    : O.clean ? `Perfect run! ${stars}/3 ★${stars >= 3 ? ' — mastered 🏆' : ''}`
+    : `${O.miss} wrong move${O.miss === 1 ? '' : 's'}${O.used ? ' + hints' : ''} — play it again for a clean ★.`;
+  O.feed.push({ who: 'coach', label: '📘 End of book', note: `${l ? `<b>${esc(l.group)} · ${esc(l.name)}</b><br>` : ''}${how}<br><br><b>Your plan from here:</b> ${esc(l ? l.plan : O.op.groups[0].plan)}<br><br>Stockfish (${LEVELS[O.level].name}) now plays ${themName()} — keep going! I'll check every move you make.`, html: true });
+  enterFree(true);
+  renderOpLines();
+}
+function enterFree(fromBook) {
+  O.phase = 'free'; O.hint = 0; O.hintMove = null;
+  if (!fromBook) O.feed.push({ who: 'coach', label: '⚔ Off the book', note: `You're on your own now — Stockfish (${LEVELS[O.level].name}) plays ${themName()}. Plan: ${esc((O.line || {}).plan || O.op.groups[0].plan)}`, html: true });
+  freeAdvance();
+}
+function freeAdvance() {
+  if (O.pos.game_over()) {
+    O.state = 'over';
+    const win = O.pos.in_checkmate() && !userTurn();
+    O.coach = { kind: win ? 'good' : O.pos.in_checkmate() ? 'bad' : 'play', icon: win ? '🏆' : O.pos.in_checkmate() ? '♚' : '½',
+                title: win ? 'Checkmate — you win!' : O.pos.in_checkmate() ? 'Checkmated' : 'Draw', sub: 'Press 📊 Review to go through the game, or Next line.' };
+    sfx('end'); renderOpStatus(); drawOpening(); return;
+  }
+  if (userTurn()) { O.state = 'play'; renderOpStatus(); drawOpening(); return; }
+  O.state = 'wait'; renderOpStatus();
+  const L = LEVELS[O.level], token = O.token;
+  opSearch(O.pos.fen(), { skill: L.skill, depth: L.depth, movetime: Math.min(L.time, 2500) }).then(r => {
+    if (O.token !== token || !r || !r.bestmove) return;
+    const m = O.pos.move(uciMove(r.bestmove));
+    O.feed.push({ who: 'them', label: moveLabel(ply() - 1, m.san), note: '' });
+    O.last = { from: m.from, to: m.to }; O.badge = null; O.hint = 0; O.hintMove = null;
+    if (mode === 'opening') moveSound(m);
+    drawOpening(moveAnim(m)); renderOpMoves();
+    freeAdvance();
+  });
+}
+
+// ---------- User moves ----------
+function opMove(from, to, promo, anim = true) {
+  selected = null;
+  if (O.state !== 'play' || !userTurn()) return false;
+  const legal = O.pos.moves({ square: from, verbose: true }).filter(m => m.to === to);
+  if (!legal.length) return false;
+  if (legal.some(m => m.promotion) && !promo) { askPromotion(O.op.side, q => opMove(from, to, q)); return true; }
+  const fb = O.pos.fen(), prevLast = O.last, n = ply(), exp = O.phase === 'book' && O.mode !== 'basics' ? expectedMove() : null;
+  const m = O.pos.move({ from, to, promotion: promo || undefined }), uci = from + to + (promo || '');
+  O.last = { from, to };
+  if (O.mode === 'basics') { lessonMove(m, uci, prevLast, anim); return true; }
+  if (O.phase === 'book') {
+    if (uci === exp.uci) {
+      O.feed.push({ who: 'me', label: moveLabel(n, m.san), note: noteOf(O.op, exp) });
+      O.hint = 0; O.tries = 0; O.wrong = false; O.badge = { sq: to, kind: 'best' }; O.coach = null;
+      moveSound(m); drawOpening(anim ? moveAnim(m) : null); renderOpMoves();
+      advance();
+    } else bookMiss(m, uci, fb, exp, prevLast, anim);
+    return true;
+  }
+  freeMove(m, uci, fb, prevLast, anim);
+  return true;
+}
+async function bookMiss(m, uci, fb, exp, prevLast, anim) {
+  O.miss++; O.tries++; O.wrong = true; O.state = 'think';
+  if (O.mode !== 'learn' && O.tries >= 2) { O.hint = 2; O.used = true; }
+  O.badge = { sq: m.to, kind: 'mistake' }; O.undoLast = prevLast;
+  sfx('wrong'); drawOpening(anim ? moveAnim(m) : null);
+  const authored = O.op.why[posKey(fb) + '|' + m.san];
+  O.coach = { kind: 'bad', icon: '✕', title: `${esc(m.san)} isn't the book move`, body: (authored ? `<p>${esc(authored)}</p>` : '') + '<p class="pz-s"><span class="spin"></span> Asking Stockfish why…</p>' };
+  renderOpStatus();
+  const token = O.token, j = await judge(fb, uci, exp.uci);
+  if (O.token !== token) return;
+  const showBook = O.mode === 'learn' || O.hint === 2;
+  const bookTxt = showBook ? `<p>The book move is <b>${esc(moveLabel(ply() - 1, exp.san))}</b>${noteOf(O.op, exp) ? ' — ' + esc(noteOf(O.op, exp)) : '.'}</p>` : '<p>Try to find the book move. Stuck? Press 💡 Hint.</p>';
+  let body = authored ? `<p>${esc(authored)}</p>` : '', kind = 'bad', icon = '✕';
+  if (!j) body += '<p>Not the move this repertoire plays.</p>';
+  else if (j.loss < 4) {
+    kind = 'hint'; icon = '≈'; O.badge.kind = 'good';
+    body += `<p>Actually not bad — Stockfish rates it about the same (${povScore(j.played.score)} vs ${povScore(j.best.score)}). But it's not the repertoire move, so you'd be on your own after it.</p>`;
+  } else {
+    O.badge.kind = j.loss < 10 ? 'inaccuracy' : j.loss < 20 ? 'mistake' : 'blunder';
+    if (!authored) body += whyText(fb, uci, j);
+    else body += `<p>Stockfish: ${povScore(j.best.score)} → ${povScore(j.played.score)} for you.</p>`;
+  }
+  O.coach = { kind, icon, title: `${esc(m.san)} isn't the book move`, body: body + bookTxt, actions: [{ id: 'retry', label: '↶ Try again', primary: true }] };
+  O.state = 'review'; drawOpening(); renderOpStatus();
+}
+async function freeMove(m, uci, fb, prevLast, anim) {
+  O.badge = null; O.hint = 0; O.hintMove = null; O.undoLast = prevLast; O.state = 'think';
+  moveSound(m); drawOpening(anim ? moveAnim(m) : null); renderOpMoves();
+  O.coach = { kind: 'play', icon: '🔍', title: 'Coach is checking your move…', body: '<p class="pz-s"><span class="spin"></span> Stockfish is looking at it.</p>' };
+  renderOpStatus();
+  const token = O.token, n = ply() - 1, j = await judge(fb, uci);
+  if (O.token !== token) return;
+  if (!j) { O.coach = null; O.feed.push({ who: 'me', label: moveLabel(n, m.san), note: '' }); return freeAdvance(); }
+  O.evalScore = j.played.score;
+  const isBest = j.best.pv[0] === uci;
+  const kind = isBest ? 'best' : j.loss < 2 ? 'excellent' : j.loss < 5 ? 'good' : j.loss < 10 ? 'inaccuracy' : j.loss < 20 ? 'mistake' : 'blunder';
+  O.badge = { sq: m.to, kind };
+  const bestSan = pvSan(fb, j.best.pv, 1)[0];
+  if (kind === 'mistake' || kind === 'blunder') {
+    O.pending = { label: moveLabel(n, m.san), kind, bestSan };
+    O.coach = { kind: 'bad', icon: KINFO[kind].sym, title: `${esc(m.san)} is ${KINFO[kind].phrase}`, body: whyText(fb, uci, j) + `<p>Better was <b>${esc(bestSan)}</b>.</p>`,
+                actions: [{ id: 'takeback', label: '↶ Take it back', primary: true }, { id: 'keep', label: 'Keep playing' }] };
+    O.state = 'review'; sfx('wrong'); drawOpening(); renderOpStatus(); return;
+  }
+  O.coach = null;
+  O.feed.push({ who: 'me', label: moveLabel(n, m.san), note: kind === 'inaccuracy' ? `?! A bit inaccurate — ${bestSan} was better.` : `${KINFO[kind].sym} ${KINFO[kind].label}` });
+  drawOpening(); freeAdvance();
+}
+function opAction(id) {
+  if (id === 'retry' || id === 'takeback') {
+    O.pos.undo(); O.badge = null; O.last = O.undoLast; O.coach = null; O.pending = null; O.state = 'play';
+    drawOpening(); renderOpMoves(); renderOpStatus();
+  } else if (id === 'keep' && O.pending) {
+    O.feed.push({ who: 'bad', label: O.pending.label, note: `${KINFO[O.pending.kind].sym} ${KINFO[O.pending.kind].label} — ${O.pending.bestSan} was better.` });
+    O.pending = null; O.coach = null; freeAdvance();
+  }
+}
+async function opHint() {
+  if (O.mode === 'basics') { if (!O.solved && curStep().task) { O.lessonHint = true; drawOpening(); renderOpStatus(); } return; }
+  if (O.state !== 'play' || !userTurn() || (O.mode === 'learn' && O.phase === 'book')) return;
+  O.used = O.used || O.phase === 'book';
+  if (O.phase === 'book') { O.hint = Math.min(2, O.hint + 1); drawOpening(); renderOpStatus(); return; }
+  if (O.hint >= 2) return;
+  O.hint++;
+  if (!O.hintMove) {
+    O.coach = { kind: 'hint', icon: '💡', title: 'Thinking…', body: '<p class="pz-s"><span class="spin"></span> Stockfish is looking for the best move.</p>' };
+    renderOpStatus();
+    const token = O.token, fen = O.pos.fen(), r = await opSearch(fen, { depth: 14, movetime: 2500 });
+    if (O.token !== token || O.pos.fen() !== fen) return;
+    O.coach = null;
+    if (!r || !r.lines[0]) { renderOpStatus(); return; }
+    O.hintMove = { uci: r.lines[0].pv[0], san: pvSan(fen, r.lines[0].pv, 1)[0], why: reasonFor(fen, r.lines[0]) };
+    O.evalScore = r.lines[0].score;
+  }
+  drawOpening(); renderOpStatus();
+}
+
+// ---------- Basics (lessons) ----------
+const curLesson = () => O.op.lessons[O.lesson];
+const curStep = () => curLesson().steps[O.step];
+function startLesson(li, si) {
+  O.mode = 'basics'; resetBoardState();
+  O.lesson = li; O.step = si; O.lessonHint = false; O.lessonTries = 0;
+  const st = curStep();
+  O.pos = new Chess(st.fen); O.last = st.last;
+  O.state = st.task ? 'play' : 'idle';
+  if (O.step === curLesson().steps.length - 1 && !st.task) markLesson();
+  prog.opId = O.op.id; prog.opMode = 'basics'; prog.opLesson = li; saveProgress();
+  renderOpening(); drawOpening();
+}
+function markLesson() { prog.openings['lesson:' + curLesson().id] = { learned: true, reps: 0, perfect: 0 }; saveProgress(); renderOpLines(); }
+function lessonMove(m, uci, prevLast, anim) {
+  const st = curStep();
+  if (uci === st.taskUci) {
+    O.solved = true; O.state = 'idle'; O.badge = { sq: m.to, kind: 'best' };
+    moveSound(m); sfx('right'); drawOpening(anim ? moveAnim(m) : null);
+    if (O.step === curLesson().steps.length - 1) markLesson();
+    renderOpStatus(); return;
+  }
+  O.lessonTries++; O.badge = { sq: m.to, kind: 'mistake' }; O.state = 'wait';
+  if (O.lessonTries >= 2) O.lessonHint = true;
+  sfx('wrong'); drawOpening(anim ? moveAnim(m) : null);
+  O.coach = { kind: 'bad', icon: '✕', title: `Not ${esc(m.san)}`, body: `<p>${O.lessonHint ? 'Look at the yellow arrow.' : 'Read the explanation again — the answer is in it.'}</p>` };
+  renderOpStatus();
+  const token = O.token;
+  setTimeout(() => {
+    if (O.token !== token) return;
+    O.pos.undo(); O.badge = null; O.last = prevLast; O.coach = null; O.state = 'play';
+    drawOpening(); renderOpStatus();
+  }, 1100);
+}
+function lessonNext() {
+  const ls = O.op.lessons;
+  if (O.step < curLesson().steps.length - 1) return startLesson(O.lesson, O.step + 1);
+  if (O.lesson < ls.length - 1) return startLesson(O.lesson + 1, 0);
+  O.mode = 'learn'; startTraining(O.op.lines[0]);
+}
+function lessonBack() {
+  if (O.step > 0) return startLesson(O.lesson, O.step - 1);
+  if (O.lesson > 0) startLesson(O.lesson - 1, O.op.lessons[O.lesson - 1].steps.length - 1);
+}
+
+// ---------- Opening rendering ----------
+function drawOpening(anim) {
+  if (mode !== 'opening') return;
+  if (!O.pos) { drawBoard({ pos: new Chess() }); return; }
+  const arrows = [];
+  let sel = selected, marks = [];
+  const A = (u, color) => arrows.push({ from: u.slice(0, 2), to: u.slice(2, 4), color });
+  if (O.mode === 'basics') {
+    const st = curStep();
+    if (!O.solved) for (const a of st.arrows || []) A(a.replace('!', ''), a[0] === '!' ? '#e0533f' : '#81b64c');
+    if (O.lessonHint && !O.solved && st.taskUci) A(st.taskUci, '#f7c045');
+    marks = st.marks || [];
+  } else if (O.state === 'play' && userTurn()) {
+    const exp = O.phase === 'book' ? expectedMove() : O.hintMove;
+    if (exp && O.phase === 'book' && O.mode === 'learn') A(exp.uci, '#81b64c');
+    else if (exp && O.hint === 2) A(exp.uci, '#f7c045');
+    else if (exp && O.hint === 1 && !sel) sel = exp.uci.slice(0, 2);
+  }
+  drawBoard({ pos: O.pos, last: O.last, sel, targets: sel && sel === selected ? O.pos.moves({ square: sel, verbose: true }) : [], badge: O.badge, arrows, marks, anim });
+  const me = { name: 'You', av: '🙂', toMove: O.state === 'play' && userTurn() };
+  const them = { name: themName(), elo: O.phase === 'free' && O.mode !== 'basics' ? 'Stockfish ' + LEVELS[O.level].name : 'book', av: O.phase === 'free' ? '♞' : '📖',
+                 toMove: ['wait', 'play'].includes(O.state) && !userTurn() };
+  renderCards(O.pos, O.op.side === 'w' ? { w: me, b: them } : { w: them, b: me });
+  showEval(O.phase === 'free' ? O.evalScore : null);
+}
+function renderOpening() {
+  document.querySelectorAll('#opSeg button').forEach(b => b.classList.toggle('on', b.dataset.op === O.op.id));
+  document.querySelectorAll('#opModeSeg button').forEach(b => b.classList.toggle('on', b.dataset.m === O.mode));
+  $('opBlurb').textContent = O.op.blurb;
+  $('opModeInfo').textContent = MODE_INFO[O.mode];
+  $('opSurpriseRow').hidden = O.mode !== 'drill';
+  $('opLevelRow').hidden = O.mode === 'basics';
+  $('opMovesCard').hidden = O.mode === 'basics';
+  renderOpStatus(); renderOpMoves(); renderOpLines();
+}
+function statusParts() {
+  if (O.coach) return O.coach;
+  if (O.mode === 'basics') {
+    const ls = curLesson(), st = curStep();
+    let body = `<p>${st.text}</p>`;
+    if (st.task && O.solved) body += `<p class="op-ok">✓ ${st.done || 'Correct!'}</p>`;
+    else if (st.task) body += `<p class="op-task">👉 Your move — play it on the board.</p>`;
+    return { kind: st.task && !O.solved ? 'play' : 'good', icon: '📚', title: esc(ls.title), sub: `Step ${O.step + 1} of ${ls.steps.length}`, body };
+  }
+  if (O.state === 'wait') return { kind: 'play', icon: '⏳', title: `${themName()} is thinking…`, sub: O.phase === 'free' ? `Stockfish ${LEVELS[O.level].name}` : 'Book move coming' };
+  if (O.phase === 'book') {
+    const exp = expectedMove();
+    if (!exp) return { kind: 'play', icon: '…', title: '' };
+    if (O.mode === 'learn') return { kind: 'play', icon: '📖', title: `Play ${esc(moveLabel(ply(), exp.san))}`, body: `<p>${esc(noteOf(O.op, exp)) || 'Follow the green arrow.'}</p>` };
+    if (O.hint) return { kind: 'hint', icon: '💡', title: O.hint === 1 ? 'Hint: move the highlighted piece' : `Hint: ${esc(moveLabel(ply(), exp.san))}`,
+                         body: O.hint === 1 ? '<p>Press 💡 again to see the exact move.</p>' : `<p>${esc(noteOf(O.op, exp)) || 'Play the arrow move.'}</p>` };
+    if (O.wrong) return { kind: 'bad', icon: '✕', title: 'Not the book move — try again', sub: 'Stuck? Press 💡 Hint.' };
+    return { kind: 'play', icon: O.op.side === 'w' ? '♔' : '♚', title: 'Your move', sub: 'Play the book move from memory.' };
+  }
+  const plan = esc((O.line || O.credited[0] || {}).plan || O.op.groups[0].plan);
+  if (O.hint && O.hintMove) return { kind: 'hint', icon: '💡', title: O.hint === 1 ? 'Hint: move the highlighted piece' : `Hint: ${esc(O.hintMove.san)}`,
+                                     body: O.hint === 1 ? `<p>Remember the plan: ${plan}</p><p>Press 💡 again to see the move.</p>` : `<p>${O.hintMove.why}</p>` };
+  return { kind: 'play', icon: '⚔', title: 'Middlegame — your move', body: `<p><b>Plan:</b> ${plan}</p>` };
+}
+function renderOpStatus() {
+  const p = statusParts(), done = O.phase === 'free' || O.state === 'over';
+  const tag = O.mode === 'basics' ? '' : O.mode === 'drill' && !O.credited.length ? '🎲 Drill — the opponent chooses the line'
+    : esc(`${(O.line || O.credited[0]).group} · ${(O.line || O.credited[0]).name}`);
+  const feed = O.mode === 'basics' ? '' : O.feed.map(f => `<div class="op-note ${f.who}"><b>${esc(f.label)}</b>${f.note ? (f.html ? '<br>' + f.note : ' — ' + esc(f.note)) : ''}</div>`).join('');
+  $('opStatus').className = 'card pz-status ' + p.kind;
+  $('opStatus').innerHTML = `<div class="pz-h"><span class="pz-ic">${p.icon}</span><div><div class="pz-t">${p.title}</div>${p.sub ? `<div class="pz-s">${p.sub}</div>` : ''}</div></div>
+    ${p.body ? `<div class="op-body">${p.body}</div>` : ''}
+    ${p.actions ? `<div class="row">${p.actions.map(a => `<button class="btn${a.primary ? ' primary' : ''}" data-act="${a.id}">${a.label}</button>`).join('')}</div>` : ''}
+    ${tag ? `<div class="tags"><span class="tag">${tag}</span></div>` : ''}${feed ? `<div class="op-feed" id="opFeed">${feed}</div>` : ''}`;
+  const f = $('opFeed'); if (f) f.scrollTop = f.scrollHeight;
+  // buttons
+  const B = (id, label, show = true, dis = false, prim = false) => { const b = $(id); b.hidden = !show; b.innerHTML = label; b.disabled = dis; b.classList.toggle('primary', prim); };
+  if (O.mode === 'basics') {
+    const st = curStep(), last = O.lesson === O.op.lessons.length - 1 && O.step === curLesson().steps.length - 1;
+    B('opHint', '💡 Show me', true, !st.task || O.solved);
+    B('opRestart', '◀ Back', true, O.lesson === 0 && O.step === 0);
+    B('opReview', '', false);
+    B('opNext', last ? 'Start learning lines ▶' : 'Next ▶', true, false, !st.task || O.solved);
+  } else {
+    B('opHint', '💡 Hint', true, O.state !== 'play' || !userTurn() || (O.mode === 'learn' && O.phase === 'book'));
+    B('opRestart', '↻ Restart line', true, false);
+    B('opReview', '📊 Review game', true, ply() < 2);
+    B('opNext', 'Next line ⏭', true, false, done);
+  }
+}
+function renderOpMoves() {
+  if (!O.pos) return;
+  const h = O.pos.history();
+  let html = '';
+  for (let i = 0; i < h.length; i += 2) html += `<span class="n">${i / 2 + 1}.</span><span class="m">${h[i]}</span><span class="m">${h[i + 1] || ''}</span>`;
+  $('opMoves').innerHTML = html || '<span></span><span class="m" style="color:var(--faint)">No moves yet</span>';
+  $('opMoves').scrollTop = $('opMoves').scrollHeight;
+}
+function renderOpLines() {
+  let html = '', learned = 0, mastered = 0, group = null;
+  if (O.mode === 'basics') {
+    O.op.lessons.forEach((ls, i) => {
+      const ok = opStat('lesson:' + ls.id).learned;
+      if (ok) learned++;
+      html += `<button class="op-line${i === O.lesson ? ' on' : ''}" data-lesson="${i}"><span class="st">${ok ? '✅' : '○'}</span><span class="nm">${esc(ls.title)}</span><span class="stars">${ls.steps.length} steps</span></button>`;
+    });
+    $('opLines').innerHTML = html;
+    $('opLinesTitle').textContent = 'Lessons';
+    $('opProg').textContent = `${learned}/${O.op.lessons.length} done`;
+    return;
+  }
+  const hide = O.mode === 'drill';
+  for (const l of O.op.lines) {
+    const p = opStat(l.id), stars = Math.min(3, p.perfect);
+    if (p.learned) learned++;
+    if (stars >= 3) mastered++;
+    if (l.group !== group) { html += `<div class="op-group">${esc(l.group)}</div>`; group = l.group; }
+    const st = stars >= 3 ? '🏆' : p.reps ? '🎯' : p.learned ? '📖' : '○';
+    html += `<button class="op-line${l === O.line && !hide ? ' on' : ''}" data-id="${l.id}" title="${p.reps} practice run${p.reps === 1 ? '' : 's'}">
+      <span class="st">${st}</span><span class="nm">${esc(l.name)}</span><span class="stars">${'★'.repeat(stars)}<i>${'★'.repeat(3 - stars)}</i></span></button>`;
+  }
+  $('opLines').innerHTML = html;
+  $('opLinesTitle').textContent = 'Lines';
+  $('opProg').textContent = `${learned}/${O.op.lines.length} learned · ${mastered} mastered`;
+}
+
+// ---------- Opening controls ----------
+$('opSeg').onclick = e => {
+  const b = e.target.closest('button'); if (!b || b.dataset.op === O.op.id) return;
+  O.op = OPENINGS.find(o => o.id === b.dataset.op);
+  if (O.mode === 'basics') startLesson(0, 0);
+  else startTraining(O.op.lines.find(l => !opStat(l.id).learned) || O.op.lines[0]);
+};
+$('opModeSeg').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.m === 'basics') { startLesson(O.mode === 'basics' ? O.lesson : 0, 0); return; }
+  const line = O.line || O.credited[0] || O.op.lines[0];
+  O.mode = b.dataset.m; startTraining(line);
+};
+$('opLines').onclick = e => {
+  const b = e.target.closest('.op-line'); if (!b) return;
+  if (b.dataset.lesson) return startLesson(+b.dataset.lesson, 0);
+  if (O.mode === 'drill') O.mode = 'practice';
+  startTraining(O.op.lines.find(l => l.id === b.dataset.id));
+};
+$('opNext').onclick = () => {
+  if (O.mode === 'basics') return lessonNext();
+  const ls = O.op.lines, cur = O.line || O.credited[0];
+  startTraining(O.mode === 'drill' ? null : ls[(ls.indexOf(cur) + 1) % ls.length]);
+};
+$('opRestart').onclick = () => {
+  if (O.mode === 'basics') return lessonBack();
+  startTraining(O.line);
+};
+$('opHint').onclick = opHint;
+$('opStatus').onclick = e => { const b = e.target.closest('[data-act]'); if (b) opAction(b.dataset.act); };
+$('opLevel').onchange = () => { O.level = +$('opLevel').value; prog.opLevel = O.level; saveProgress(); drawOpening(); };
+$('opSurprise').onchange = () => { O.surprise = $('opSurprise').checked; prog.opSurprise = O.surprise; saveProgress(); };
+$('opReview').onclick = () => {
+  if (!O.pos || ply() < 2 || O.state === 'review') return;
+  const pgn = O.pos.pgn();
+  setMode('review');
+  loadReview(pgn, O.op.side === 'w' ? { white: 'You', black: 'Opponent', userColor: 'w' } : { white: 'Opponent', black: 'You', userColor: 'b' });
+};
+$('opReset').onclick = () => {
+  if (!confirm('Reset your progress for all opening lines and lessons?')) return;
+  prog.openings = {}; saveProgress(); renderOpLines();
+};
+
+// ======================================================================
 // App shell: tabs, themes, sound, keyboard
 // ======================================================================
+const drawCurrent = () => (mode === 'play' ? drawPlay() : mode === 'review' ? drawReview() : mode === 'puzzle' ? drawPuzzle() : mode === 'opening' ? drawOpening() : EXTRA_MODES[mode].draw());
 function setMode(m) {
+  if (EXTRA_MODES[mode] && mode !== m && EXTRA_MODES[mode].leave) EXTRA_MODES[mode].leave();
   mode = m;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('playView').hidden = m !== 'play'; $('reviewView').hidden = m !== 'review'; $('puzzleView').hidden = m !== 'puzzle';
+  $('playView').hidden = m !== 'play'; $('reviewView').hidden = m !== 'review'; $('puzzleView').hidden = m !== 'puzzle'; $('openingView').hidden = m !== 'opening';
+  for (const [k, x] of Object.entries(EXTRA_MODES)) $(x.view).hidden = m !== k;
   selected = null;
+  if (EXTRA_MODES[m] && EXTRA_MODES[m].enter) EXTRA_MODES[m].enter();
   if (m !== 'puzzle') stopAna(); else if (P.ana) runAna();
-  if (m === 'play') drawPlay(); else if (m === 'review') drawReview(); else drawPuzzle();
+  drawCurrent();
   prog.tab = m; saveProgress();
 }
 document.querySelectorAll('#tabs button').forEach(b => (b.onclick = () => setMode(b.dataset.mode)));
@@ -1320,16 +1896,28 @@ document.addEventListener('keydown', e => {
   if (mode === 'puzzle' && P.ana) {
     if (e.key === 'ArrowLeft') { anaUndo(); e.preventDefault(); }
   }
-  if (e.key === 'f') (mode === 'play' ? $('flipBtn') : mode === 'review' ? $('navFlip') : $('pzFlip')).click();
+  if (e.key === 'f') {
+    if (mode === 'opening') { flip.opening = !flip.opening; drawOpening(); }
+    else if (EXTRA_MODES[mode]) { flip[mode] = !flip[mode]; drawCurrent(); }
+    else (mode === 'play' ? $('flipBtn') : mode === 'review' ? $('navFlip') : $('pzFlip')).click();
+  }
 });
-window.addEventListener('resize', () => (mode === 'play' ? drawPlay() : mode === 'review' ? drawReview() : drawPuzzle()));
+window.addEventListener('resize', () => drawCurrent());
 
 (async function boot() {
   await loadProgress();
   restorePlay();
   drawPlay(); renderPlayMoves(); updateStatus(); maybeEngineMove();
   await initPuzzles();
-  setMode(['play', 'review', 'puzzle'].includes(prog.tab) ? prog.tab : 'play');
+  initOpenings();
+  for (const x of Object.values(EXTRA_MODES)) if (x.init) x.init();
+  setMode(['play', 'review', 'puzzle', 'opening'].includes(prog.tab) || EXTRA_MODES[prog.tab] ? prog.tab : 'play');
 })();
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // when an updated version takes over, reload once so the new buttons/features appear
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+}
