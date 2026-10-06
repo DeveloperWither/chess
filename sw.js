@@ -1,6 +1,6 @@
 // Offline support: keeps every app file on the device.
 // Bump VERSION whenever app files change so phones pick up the update.
-const VERSION = 'chess-studio-v7';
+const VERSION = 'chess-studio-v8';
 const FILES = [
   './', 'index.html', 'style.css', 'app.js', 'openings.js', 'vision.js', 'endgames.js', 'firebase-config.js', 'online.js', 'chess.min.js', 'puzzles.json', 'manifest.webmanifest',
   'engine/stockfish.wasm.js', 'engine/stockfish.wasm', 'stockfish.js',
@@ -45,4 +45,22 @@ self.addEventListener('fetch', e => {
     }));
   }
   // everything else (Chess.com, Lichess) goes straight to the network
+});
+
+// ---------- notifications (challenges / your move) ----------
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Chess Studio', {
+    body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'chess', renotify: true, data: { url: d.url || './' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL(e.notification.data.url, self.registration.scope).href, game = new URL(url).searchParams.get('game');
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const c = list[0];
+    if (c) { c.postMessage({ openGame: game, openUrl: url }); return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

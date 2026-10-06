@@ -7,7 +7,7 @@
 const FB_VER = '10.12.2';
 const EMU = /[?&]emu=1/.test(location.search); // local Firebase emulator (testing)
 const NAME_RE = /^[A-Za-z0-9_]{5,20}$/;
-const ONLINE_MS = 120000;
+const ONLINE_MS = 60000; // 'online' = app open and visible within the last minute (the push worker uses the same rule)
 const N = { ready: false, cfgMissing: false, auth: null, db: null, user: null, me: null, friends: [], fdocs: {}, invites: [], games: [],
             gid: null, game: null, chess: null, prevPly: -1, dlg: null, unsub: [], gUnsub: null, fUnsubs: {}, beat: null, offline: false, msg: '' };
 const emailOf = name => `${name.toLowerCase()}@users.chess-studio.app`;
@@ -82,8 +82,13 @@ async function signedIn(u) {
   const name = (snap.exists && snap.data().name) || N.pendingName || u.email.split('@')[0];
   N.me = { uid: u.uid, name };
   if (!snap.exists) await N.db.collection('users').doc(u.uid).set({ name, nameLower: name.toLowerCase(), lastSeen: Date.now(), created: Date.now() }, { merge: true });
-  beat(); clearInterval(N.beat); N.beat = setInterval(beat, 45000);
+  beat(); clearInterval(N.beat); N.beat = setInterval(beat, 25000);
+  if (pushState() === 'on') enablePush(false).catch(() => {}); // keep this device's push address fresh for this account
+  // forget devices that haven't opened the app in 60 days (uninstalled, old phones)
+  N.db.collection('users').doc(u.uid).collection('push').where('at', '<', Date.now() - 60 * 864e5).get()
+    .then(q => q.forEach(d => d.ref.delete().catch(() => {}))).catch(() => {});
   const uid = u.uid;
+  watchChats(uid);
   N.unsub.push(N.db.collection('users').doc(uid).collection('friends').onSnapshot(s => { N.friends = s.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name)); watchFriends(); onRender(); }));
   N.unsub.push(N.db.collection('games').where('invited', 'array-contains', uid).onSnapshot(s => {
     const before = N.invites.length;
@@ -96,15 +101,67 @@ async function signedIn(u) {
     onRender();
   }, e => console.warn('games', e)));
   renderAccountChip(); onRender();
+  const want = new URLSearchParams(location.search).get('game'); // opened from a notification
+  const wantChat = new URLSearchParams(location.search).get('chat');
+  if (want || wantChat) history.replaceState(null, '', location.pathname);
+  if (want) openGame(want);
+  if (wantChat) openDm(wantChat);
 }
 function signedOut() {
   N.unsub.forEach(f => f()); N.unsub = []; Object.values(N.fUnsubs).forEach(f => f()); N.fUnsubs = {};
-  if (N.gUnsub) N.gUnsub(); N.gUnsub = null;
+  if (N.gUnsub) N.gUnsub(); N.gUnsub = null; stopGameChat(); closeDm(); N.chats = {}; N.chatsLoaded = false;
   clearInterval(N.beat); N.user = null; N.me = null; N.friends = []; N.invites = []; N.games = []; N.gid = null; N.game = null;
   renderAccountChip(); onRender();
   if (!N.skipped && !store.get('onlineSkip', false)) showLogin(true);
 }
-function beat() { if (N.me && N.db) N.db.collection('users').doc(N.me.uid).update({ lastSeen: Date.now() }).catch(() => {}); }
+// lastSeen only counts while the app is actually on screen, so friends get a notification as soon as you leave it.
+function beat() { if (N.me && N.db && document.visibilityState === 'visible') N.db.collection('users').doc(N.me.uid).update({ lastSeen: Date.now() }).catch(() => {}); }
+function away() { if (N.me && N.db) N.db.collection('users').doc(N.me.uid).update({ lastSeen: 0 }).catch(() => {}); }
+
+// ---------- notifications (Web Push via the chess-studio-push worker) ----------
+const PUSH = window.PUSH_CONFIG || null;
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const STANDALONE = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function pushState() {
+  if (!PUSH || !/^https?:/.test(PUSH.url) || location.protocol === 'file:') return 'none'; // no sender deployed yet
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return IOS && !STANDALONE ? 'ios-install' : 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  return Notification.permission === 'granted' && store.get('pushOn', false) ? 'on' : 'off';
+}
+const b64u = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+async function pushDocId(endpoint) { const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint))); return [...h.slice(0, 12)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+async function enablePush(ask) {
+  if (ask && (await Notification.requestPermission()) !== 'granted') { onRender(); return; } // must be the first thing in the tap (iOS)
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  const key = b64u(PUSH.vapidPublicKey);
+  if (sub && sub.options.applicationServerKey && new Uint8Array(sub.options.applicationServerKey).join() !== key.join()) { await sub.unsubscribe(); sub = null; }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  const j = sub.toJSON();
+  await N.db.collection('users').doc(N.me.uid).collection('push').doc(await pushDocId(j.endpoint))
+    .set({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, device: navigator.userAgent.slice(0, 160), at: Date.now() });
+  store.set('pushOn', true); onRender();
+}
+async function disablePush() {
+  store.set('pushOn', false);
+  try {
+    const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+    if (sub) { if (N.me) await N.db.collection('users').doc(N.me.uid).collection('push').doc(await pushDocId(sub.endpoint)).delete().catch(() => {}); await sub.unsubscribe(); }
+  } catch {}
+  onRender();
+}
+// Ask the worker to ping someone. It checks the game itself, so this can only reach real opponents/invitees.
+async function notify(to, gid, kind, msg) {
+  if (!PUSH || !N.user || !to || to === N.me.uid) return;
+  try {
+    await fetch(PUSH.url + '/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + (await N.user.getIdToken()), 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({ to, game: gid, kind, msg }) });
+  } catch (e) { console.warn('notify', e); }
+}
+function notifyAfterMove(g, moves, status) {
+  if (status === 'over') g.members.forEach(u => notify(u, g.id, 'move'));
+  else notify(seatAt(g, moves.length), g.id, 'move');
+}
 function watchFriends() {
   for (const f of N.friends) if (!N.fUnsubs[f.uid]) N.fUnsubs[f.uid] = N.db.collection('users').doc(f.uid).onSnapshot(d => { N.fdocs[f.uid] = d.data(); onRender(); });
 }
@@ -140,6 +197,7 @@ async function createGame(friendUid, size, side) {
               members: [N.me.uid], invited: f ? [f.uid] : [], status: 'waiting', moves: [], result: null, reason: '', createdAt: Date.now(), updatedAt: Date.now() };
   if (f) g.names[f.uid] = f.name;
   const ref = await N.db.collection('games').add(g);
+  if (f) notify(f.uid, ref.id, 'challenge');
   N.dlg = null; openGame(ref.id);
 }
 // One tap: 1 vs 1 with a random colour. Re-uses an open challenge to the same friend instead of stacking new ones.
@@ -151,6 +209,7 @@ async function quickPlay(uid) {
 async function invite(gid, uid) {
   const f = N.friends.find(x => x.uid === uid); if (!f) return;
   await N.db.collection('games').doc(gid).update({ invited: FV().arrayUnion(uid), [`names.${uid}`]: f.name, updatedAt: Date.now() });
+  notify(uid, gid, 'challenge');
 }
 async function joinGame(gid, side) {
   const ref = N.db.collection('games').doc(gid);
@@ -179,6 +238,7 @@ function openGame(gid) {
   if (N.gUnsub) N.gUnsub();
   N.gid = gid; N.game = null; N.prevPly = -1; selected = null;
   const ref = N.db.collection('games').doc(gid);
+  startGameChat(gid);
   N.gUnsub = ref.onSnapshot(d => applyGame(d), e => { setMsg('Could not open the game: ' + esc(e.message)); closeGame(); });
   // Safety net: while waiting for the other side, ask the server directly every few seconds,
   // so a sleepy connection (phone in the background, flaky Wi-Fi) can never stall the game.
@@ -209,8 +269,16 @@ function applyGame(d) {
   onRender();
 }
 // Coming back to the app (phone unlocked, tab switched back): catch up at once instead of waiting for a reconnect.
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && N.me) { beat(); syncGame(); } });
-function closeGame() { if (N.gUnsub) N.gUnsub(); N.gUnsub = null; clearInterval(N.poll); N.gid = null; N.game = null; onRender(); }
+document.addEventListener('visibilitychange', () => { if (!N.me) return; if (document.visibilityState === 'visible') { beat(); syncGame(); markRead(); } else away(); });
+// tapping a notification while the app is already open
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+  if (!e.data || !N.me) return;
+  const q = e.data.openUrl ? new URL(e.data.openUrl).searchParams : new URLSearchParams();
+  const game = e.data.openGame || q.get('game'), chat = q.get('chat');
+  if (game) openGame(game);
+  if (chat) openDm(chat);
+});
+function closeGame() { if (N.gUnsub) N.gUnsub(); N.gUnsub = null; stopGameChat(); clearInterval(N.poll); N.gid = null; N.game = null; onRender(); }
 const myTurn = () => N.game && N.game.status === 'playing' && seatAt(N.game, N.game.moves.length) === N.me.uid;
 async function onMove(from, to, promo) {
   selected = null;
@@ -230,13 +298,150 @@ async function onMove(from, to, promo) {
   }
   // A plain write (not a transaction): one round trip, and the board/turn update locally at once.
   // Only one player owns each ply, so two people can never write the same move.
-  N.db.collection('games').doc(g.id).update(upd).catch(e => { setMsg('Move not sent: ' + esc(e.message)); syncGame(); });
+  N.db.collection('games').doc(g.id).update(upd).then(() => notifyAfterMove(g, upd.moves, upd.status), e => { setMsg('Move not sent: ' + esc(e.message)); syncGame(); });
   return true;
 }
 async function resign() {
   const g = N.game; if (!g || g.status !== 'playing' || !confirm('Resign for your whole team?')) return;
   const c = myColor(g);
   await N.db.collection('games').doc(g.id).update({ status: 'over', result: c === 'w' ? '0-1' : '1-0', reason: `${N.me.name} resigned`, updatedAt: Date.now() });
+  notifyAfterMove(g, g.moves, 'over');
+}
+
+
+// ---------- chat: private chats with friends + a chat inside every game ----------
+// chats/{uidA_uidB}            { members, last: {from, text, at}, read: {uid: time} }  (one per pair of friends)
+// chats/{uidA_uidB}/msgs/{id}  { from, name, text, at }
+// games/{gid}/chat/{id}        { from, name, text, at }
+const CHAT_MAX = 500;
+const QUICK = ['👋 Hi!', 'Good luck!', 'Nice move!', '😅', 'Oops!', 'GG 🤝'];
+const pairId = (a, b) => [a, b].sort().join('_');
+const otherOf = pid => pid.split('_').find(u => u !== N.me.uid);
+Object.assign(N, { chats: {}, chatsLoaded: false, dm: null, dmMsgs: [], dmUnsub: null, gMsgs: [], gcUnsub: null });
+const chatVisible = () => mode === 'online' && document.visibilityState === 'visible';
+
+function watchChats(uid) {
+  N.unsub.push(N.db.collection('chats').where('members', 'array-contains', uid).onSnapshot(s => {
+    for (const ch of s.docChanges()) {
+      const c = ch.doc.data(), prev = N.chats[ch.doc.id], other = otherOf(ch.doc.id);
+      const fresh = ch.type !== 'removed' && c.last && c.last.from !== uid && (!prev || !prev.last || prev.last.at < c.last.at);
+      if (fresh && N.chatsLoaded && !(N.dm === other && chatVisible())) { sfx('msg'); chatToast(friendName(other), c.last.text, () => openDm(other)); }
+    }
+    N.chats = Object.fromEntries(s.docs.map(d => [d.id, d.data()])); N.chatsLoaded = true;
+    markRead(); onRender();
+  }, e => console.warn('chats', e)));
+}
+function unreadFrom(uid) {
+  const c = N.chats[pairId(N.me.uid, uid)];
+  return !!(c && c.last && c.last.from !== N.me.uid && c.last.at > ((c.read || {})[N.me.uid] || 0));
+}
+const unreadTotal = () => (N.me ? Object.keys(N.chats).filter(pid => unreadFrom(otherOf(pid))).length : 0);
+function friendName(uid) { const f = N.friends.find(x => x.uid === uid); if (f) return f.name; const c = N.chats[pairId(N.me.uid, uid)]; return (c && c.names && c.names[uid]) || 'Friend'; }
+
+function openDm(uid) {
+  closeDm();
+  N.dm = uid; N.dmMsgs = [];
+  let first = true;
+  N.dmUnsub = N.db.collection('chats').doc(pairId(N.me.uid, uid)).collection('msgs').orderBy('at').limitToLast(60).onSnapshot(s => {
+    N.dmMsgs = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!first && s.docChanges().some(c => c.type === 'added' && c.doc.data().from !== N.me.uid)) sfx('msg');
+    first = false; markRead(); renderChats();
+  }, e => setMsg('Chat: ' + esc(e.message)));
+  if (mode !== 'online') setMode('online');
+  onRender();
+  setTimeout(() => { const el = $('onDm'); if (el) { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); if (matchMedia('(hover: hover)').matches) el.querySelector('input').focus(); } }, 60);
+}
+function closeDm() { if (N.dmUnsub) N.dmUnsub(); N.dmUnsub = null; N.dm = null; N.dmMsgs = []; }
+function markRead() {
+  if (!N.me || !N.dm || !chatVisible()) return;
+  const pid = pairId(N.me.uid, N.dm);
+  if (unreadFrom(N.dm)) N.db.collection('chats').doc(pid).set({ read: { [N.me.uid]: Date.now() } }, { merge: true }).catch(() => {});
+}
+function startGameChat(gid) {
+  stopGameChat();
+  let first = true;
+  N.gcUnsub = N.db.collection('games').doc(gid).collection('chat').orderBy('at').limitToLast(60).onSnapshot(s => {
+    N.gMsgs = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    const inc = first ? [] : s.docChanges().filter(c => c.type === 'added' && c.doc.data().from !== N.me.uid).map(c => c.doc.data());
+    first = false; renderChats();
+    if (inc.length) {
+      sfx('msg');
+      // on a phone the chat sits under the board — pop the message up if it's off screen
+      const el = $('onGameChat'), r = el.getBoundingClientRect(), seen = mode === 'online' && r.top < innerHeight && r.bottom > 0;
+      const m = inc[inc.length - 1];
+      if (!seen) chatToast(m.name, m.text, () => { if (mode !== 'online') setMode('online'); setTimeout(() => $('onGameChat').scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); });
+    }
+  }, e => console.warn('game chat', e));
+}
+function stopGameChat() { if (N.gcUnsub) N.gcUnsub(); N.gcUnsub = null; N.gMsgs = []; }
+
+// Sending: the message shows up at once (local write), the server copy reaches the others in well under a second.
+function sendChat(where, text) {
+  text = (text || '').trim().slice(0, CHAT_MAX);
+  if (!text || !N.me) return;
+  const now = Date.now(), msg = { from: N.me.uid, name: N.me.name, text, at: now };
+  if (where === 'dm' && N.dm) {
+    const to = N.dm, pid = pairId(N.me.uid, to), chat = N.db.collection('chats').doc(pid), ref = chat.collection('msgs').doc();
+    const b = N.db.batch();
+    b.set(ref, msg);
+    b.set(chat, { members: pid.split('_'), names: { [N.me.uid]: N.me.name, [to]: friendName(to) }, last: { from: N.me.uid, text: text.slice(0, 100), at: now }, read: { [N.me.uid]: now } }, { merge: true });
+    b.commit().then(() => notify(to, pid, 'chat', ref.id), e => setMsg('Message not sent: ' + esc(e.message)));
+  } else if (where === 'game' && N.game) {
+    const g = N.game, ref = N.db.collection('games').doc(g.id).collection('chat').doc();
+    ref.set(msg).then(() => g.members.forEach(u => notify(u, g.id, 'gchat', ref.id)), e => setMsg('Message not sent: ' + esc(e.message)));
+  }
+}
+
+const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function chatList(msgs, showNames) {
+  if (!msgs.length) return '<div class="pz-s ch-empty">No messages yet — say hi 👋</div>';
+  let out = '', prev = null;
+  for (const m of msgs) {
+    const mine = m.from === N.me.uid;
+    out += `<div class="ch-m${mine ? ' me' : ''}">${showNames && !mine && m.from !== prev ? `<b>${esc(m.name)}</b>` : ''}<span>${esc(m.text)}</span><i>${hhmm(m.at)}</i></div>`;
+    prev = m.from;
+  }
+  return out;
+}
+// The input/form is built once per conversation so typing is never interrupted by live updates.
+function chatCard(el, key, title, msgs, opts) {
+  if (el.dataset.key !== key) {
+    el.dataset.key = key; el.dataset.sig = '';
+    el.innerHTML = `<div class="ana-top"><span class="card-h ch-title"></span>${opts.close ? '<button class="linkbtn" data-on="dmclose">✕ Close</button>' : ''}</div>
+      <div class="ch-list"></div>
+      <div class="ch-quick">${QUICK.map(q => `<button class="tag" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      <form class="inrow ch-form"><input maxlength="${CHAT_MAX}" placeholder="Message…" autocomplete="off" enterkeyhint="send"><button class="btn primary" type="submit">Send</button></form>`;
+  }
+  el.querySelector('.ch-title').innerHTML = title;
+  const sig = msgs.length + '|' + (msgs.length ? msgs[msgs.length - 1].id + msgs[msgs.length - 1].at : '');
+  if (el.dataset.sig !== sig) {
+    el.dataset.sig = sig;
+    const list = el.querySelector('.ch-list');
+    list.innerHTML = chatList(msgs, opts.names);
+    list.scrollTop = list.scrollHeight;
+  }
+}
+function renderChats() {
+  if (!$('onDm')) return;
+  const dm = $('onDm'), gc = $('onGameChat');
+  dm.hidden = !(N.me && N.dm);
+  if (!dm.hidden) {
+    const on = isOnline(N.fdocs[N.dm]);
+    chatCard(dm, 'dm:' + N.dm, `💬 ${esc(friendName(N.dm))} <span class="on-dot ${on ? 'on' : ''}"></span><small>${on ? 'online' : 'offline'}</small>`, N.dmMsgs, { close: true });
+  }
+  gc.hidden = !(N.me && N.game);
+  if (!gc.hidden) {
+    const others = N.game.members.filter(u => u !== N.me.uid).map(u => esc(nm(N.game, u)));
+    chatCard(gc, 'game:' + N.game.id, `💬 Game chat <small>with ${others.join(', ') || '…'}</small>`, N.gMsgs, { names: N.game.members.length > 2 });
+  }
+}
+// Little pop-up when a friend writes while you're somewhere else in the app.
+function chatToast(who, text, open) {
+  let t = $('chatToast');
+  if (!t) { t = document.createElement('button'); t.id = 'chatToast'; t.className = 'ch-toast'; document.body.appendChild(t); }
+  t.innerHTML = `<b>💬 ${esc(who)}</b><span>${esc(text)}</span>`;
+  t.onclick = () => { t.classList.remove('show'); open(); };
+  t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 5000);
 }
 
 // ---------- rendering ----------
@@ -255,7 +460,9 @@ function onDraw(anim) {
 function renderAccountChip() {
   const b = $('acctBtn'); if (!b) return;
   b.hidden = N.cfgMissing && !EMU;
-  b.textContent = N.me ? '👤 ' + N.me.name : '👤 Log in';
+  const u = N.me ? unreadTotal() : 0;
+  b.textContent = N.me ? '👤 ' + N.me.name + (u ? ` · 💬 ${u}` : '') : '👤 Log in';
+  b.classList.toggle('ch-has', u > 0);
 }
 function gameCard(g) {
   const ply = g.moves.length, turn = g.status === 'playing' ? seatAt(g, ply) : null;
@@ -263,6 +470,16 @@ function gameCard(g) {
   const tag = g.status === 'waiting' ? `<span class="tag">${g.size === 2 && g.invited.length ? 'waiting for ' + esc(nm(g, g.invited[0])) : 'waiting for players'}</span>` : g.status === 'over' ? `<span class="tag">${esc(g.result)}</span>`
     : turn === N.me.uid ? '<span class="tag lvl">your turn!</span>' : `<span class="tag">${esc(nm(g, turn))} to move</span>`;
   return `<button class="op-line${g.id === N.gid ? ' on' : ''}" data-game="${g.id}"><span class="st on-size" title="${g.size} players">👥${g.size}</span><span class="nm">${vs}</span>${tag}</button>`;
+}
+function pushRow() {
+  const st = pushState();
+  const row = (inner, sub) => `<div class="on-push">${inner}${sub ? `<div class="pz-s">${sub}</div>` : ''}</div>`;
+  if (st === 'on') return row('<div class="ana-top"><span>🔔 Notifications are on</span><button class="linkbtn" data-on="pushoff">Turn off</button></div>');
+  if (st === 'off') return row('<button class="btn wide" data-on="pushon">🔔 Turn on notifications</button>', "Get a notification when a friend challenges you or it's your move — even when the app is closed.");
+  if (st === 'ios-install') return row('<b>🔔 Notifications on iPhone</b>', 'Tap <b>Share</b> → <b>Add to Home Screen</b>, then open Chess Studio from the home-screen icon and turn them on here. (Needs iOS 16.4 or newer.)');
+  if (st === 'denied') return row('<b>🔕 Notifications are blocked</b>', 'Allow notifications for Chess Studio in your phone or browser settings, then reopen the app.');
+  if (st === 'unsupported') return row('<b>🔕 No notifications here</b>', "This browser can't show notifications. On Android use Chrome; on iPhone add the app to your Home Screen.");
+  return '';
 }
 function onRender() {
   renderAccountChip();
@@ -273,7 +490,7 @@ function onRender() {
   else if (N.offline) acc = `<div class="card-h">Online play</div><div class="pz-s">⚠ No internet — online play is unavailable right now. Everything else works offline.</div>`;
   else if (!N.ready) acc = `<div class="pz-s"><span class="spin"></span> Connecting…</div>`;
   else if (!N.me) acc = `<div class="card-h">Online play</div><div class="pz-s">Log in to add friends and play 2, 3 or 4-player games.</div><button class="btn primary wide" data-on="login">👤 Log in / create account</button>`;
-  else acc = `<div class="ana-top"><span class="card-h">Signed in</span><button class="linkbtn" data-on="logout">Log out</button></div><div class="pz-t">👤 ${esc(N.me.name)}</div>`;
+  else acc = `<div class="ana-top"><span class="card-h">Signed in</span><button class="linkbtn" data-on="logout">Log out</button></div><div class="pz-t">👤 ${esc(N.me.name)}</div>` + pushRow();
   $('onAccount').innerHTML = acc + (N.msg ? `<div class="pz-s on-msg">${N.msg}</div>` : '');
   const signed = !!N.me;
   $('onFriendsCard').hidden = !signed; $('onGamesCard').hidden = !signed;
@@ -334,16 +551,18 @@ function onRender() {
   // friends
   if (signed) {
     // online friends first
-    const fl = [...N.friends].sort((a, b) => isOnline(N.fdocs[b.uid]) - isOnline(N.fdocs[a.uid]));
+    const fl = [...N.friends].sort((a, b) => unreadFrom(b.uid) - unreadFrom(a.uid) || isOnline(N.fdocs[b.uid]) - isOnline(N.fdocs[a.uid]));
     $('onFriends').innerHTML = fl.length ? fl.map(f => {
       const on = isOnline(N.fdocs[f.uid]);
-      return `<div class="on-friend"><span class="on-dot ${on ? 'on' : ''}"></span><span class="nm">${esc(f.name)}<small>${on ? 'online now' : 'offline'}</small></span>
-        <button class="btn primary" data-play="${f.uid}">▶ Play</button><button class="linkbtn on-more" data-chal="${f.uid}" title="Team games, remove friend">⋯</button></div>`;
+      const un = unreadFrom(f.uid);
+      return `<div class="on-friend"><span class="on-dot ${on ? 'on' : ''}"></span><span class="nm">${esc(f.name)}<small class="${un ? 'ch-new' : ''}">${un ? 'new message' : on ? 'online now' : 'offline'}</small></span>
+        <button class="btn on-chatbtn${N.dm === f.uid ? ' on' : ''}" data-dm="${f.uid}" title="Chat">💬${un ? '<span class="ch-dot"></span>' : ''}</button><button class="btn primary" data-play="${f.uid}">▶ Play</button><button class="linkbtn on-more" data-chal="${f.uid}" title="Team games, remove friend">⋯</button></div>`;
     }).join('') : '<div class="pz-s">No friends yet — type a friend\'s username above. They need an account first.</div>';
     const act = N.games.filter(x => x.status !== 'over'), done = N.games.filter(x => x.status === 'over').slice(0, 5);
     $('onGames').innerHTML = (act.length ? act.map(gameCard).join('') : '<div class="pz-s">No active games. Challenge a friend!</div>') +
       (done.length ? `<div class="op-group">Finished</div>${done.map(gameCard).join('')}` : '');
   }
+  renderChats();
   onDraw();
 }
 
@@ -363,12 +582,17 @@ $('onlineView').onclick = async e => {
   const d = t.dataset;
   try {
     if (d.on === 'login') showLogin(true);
-    else if (d.on === 'logout') { N.skipped = false; await N.auth.signOut(); }
+    else if (d.on === 'pushon') await enablePush(true);
+    else if (d.on === 'pushoff') await disablePush();
+    else if (d.on === 'logout') { N.skipped = false; if (pushState() === 'on') await disablePush(); away(); await N.auth.signOut(); }
     else if (d.on === 'dlgcancel') { N.dlg = null; onRender(); }
     else if (d.on === 'dlgsend') await createGame(N.dlg.uid, N.dlg.size, N.dlg.side);
     else if (d.on === 'addfriend') await addFriend();
     else if (d.size) { N.dlg.size = +d.size; onRender(); }
     else if (d.side && t.closest('#dlgSide')) { N.dlg.side = d.side; onRender(); }
+    else if (d.quick) sendChat(t.closest('#onDm') ? 'dm' : 'game', d.quick);
+    else if (d.dm) { if (N.dm === d.dm) closeDm(); else openDm(d.dm); onRender(); }
+    else if (d.on === 'dmclose') { closeDm(); onRender(); }
     else if (d.play) { N.msg = ''; await quickPlay(d.play); }
     else if (d.chal) { N.dlg = N.dlg && N.dlg.uid === d.chal ? null : { uid: d.chal, size: 4, side: 'w' }; N.msg = ''; onRender(); }
     else if (d.unfriend) { await removeFriend(d.unfriend); if (N.dlg && N.dlg.uid === d.unfriend) { N.dlg = null; onRender(); } }
@@ -378,6 +602,12 @@ $('onlineView').onclick = async e => {
     else if (d.game) openGame(d.game);
   } catch (err) { setMsg('Something went wrong: ' + esc(err.message || err)); }
 };
+$('onlineView').addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = e.target.querySelector('input');
+  sendChat(e.target.closest('#onDm') ? 'dm' : 'game', inp.value);
+  inp.value = ''; inp.focus();
+});
 $('onFriendName').onkeydown = e => { if (e.key === 'Enter') addFriend().catch(err => setMsg(esc(err.message))); };
 $('onResign').onclick = () => resign().catch(e => setMsg(esc(e.message)));
 $('onCancel').onclick = () => cancelGame(N.gid).catch(e => setMsg(esc(e.message)));
@@ -395,5 +625,5 @@ EXTRA_MODES.online = {
          canPick: p => myTurn() && p.color === N.chess.turn() },
   draw: () => onDraw(),
   init: () => { onInit(); onRender(); },
-  enter: () => { N.msg = ''; onRender(); },
+  enter: () => { N.msg = ''; onRender(); markRead(); },
 };

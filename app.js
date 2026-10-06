@@ -50,6 +50,7 @@ function sfx(kind) {
     if (kind === 'check') { noise(0.06, 1500, 1.4); tone(660, 0.12, 0.05); tone(880, 0.16, 0.05, 0.07); }
     if (kind === 'end') [523, 659, 784, 1047].forEach((f, k) => tone(f, 0.6, 0.045, k * 0.09));
     if (kind === 'wrong') { tone(220, 0.18, 0.07); tone(165, 0.3, 0.07, 0.12); }
+    if (kind === 'msg') { tone(988, 0.09, 0.04); tone(1319, 0.16, 0.04, 0.08); }
     if (kind === 'right') { tone(784, 0.12, 0.05); tone(1175, 0.2, 0.05, 0.08); }
   } catch {}
 }

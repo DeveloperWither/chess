@@ -346,6 +346,7 @@ button, .sq { touch-action: manipulation; }
 .lg-err { color: #ff7a6a; font-size: 13px; min-height: 18px; }
 .login .linkbtn { align-self: center; }
 .on-msg { margin-top: 8px; }
+.on-push { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
 .on-friend { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 .on-friend .nm { flex: 1; font-weight: 600; }
 .on-friend .btn { padding: 6px 12px; }
@@ -425,3 +426,27 @@ button, .sq { touch-action: manipulation; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .fx-burst, .fx-spark, .fx-confetti { display: none; }
 }
+
+/* ---------- chat ---------- */
+.on-chat { display: flex; flex-direction: column; gap: 8px; }
+.on-chat .ch-title { display: flex; align-items: center; gap: 7px; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink); }
+.on-chat .ch-title small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.ch-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; min-height: 70px; overflow-y: auto; padding: 4px 2px; overscroll-behavior: contain; }
+.ch-empty { margin: auto; }
+.ch-m { align-self: flex-start; max-width: 82%; background: rgba(255,255,255,.07); border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 6px 10px; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; animation: rise .18s ease-out both; }
+.ch-m.me { align-self: flex-end; background: rgba(129,182,76,.2); border-color: rgba(149,201,95,.35); border-radius: 14px 14px 4px 14px; }
+.ch-m b { display: block; font-size: 11.5px; color: var(--gold); }
+.ch-m i { font-style: normal; font-size: 10.5px; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+.ch-quick { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.ch-quick .tag { cursor: pointer; flex: none; font: inherit; font-size: 12px; } .ch-quick .tag:hover { border-color: var(--green2); }
+.ch-form input { font-size: 16px; } /* 16px stops iPhone from zooming in */
+.on-chatbtn { position: relative; padding: 6px 10px !important; }
+.on-chatbtn.on { border-color: var(--green2); }
+.ch-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #fa412d; box-shadow: 0 0 6px #fa412d; }
+.ch-new { color: var(--green2) !important; font-weight: 600 !important; }
+#acctBtn.ch-has { border-color: var(--green2); }
+.ch-toast { position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 140%); z-index: 60; display: flex; flex-direction: column; gap: 2px; text-align: left; max-width: min(420px, calc(100vw - 32px));
+  background: rgba(22,26,36,.96); color: var(--ink); border: 1px solid rgba(149,201,95,.5); border-radius: 14px; padding: 10px 14px; font: inherit; font-size: 14px; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); transition: transform .25s ease; }
+.ch-toast.show { transform: translate(-50%, 0); }
+.ch-toast span { color: #cfd5e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
