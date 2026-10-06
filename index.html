@@ -89,7 +89,9 @@
           <button class="btn" id="hintBtn">💡 Hint</button>
           <button class="btn" id="flipBtn">⇅ Flip board</button>
         </div>
+        <label class="coach-toggle"><input type="checkbox" id="coachOn"><span class="tg"></span> 🎓 Live coach — judge &amp; explain every move I play</label>
       </div>
+      <div class="card coach play-coach" id="playCoach" hidden></div>
       <div class="card">
         <div class="card-h">Moves</div>
         <div class="moves" id="moves"></div>
@@ -277,14 +279,14 @@
         <button class="btn" id="onReview">📊 Review</button>
         <button class="btn" id="onClose">← Back to lists</button>
       </div>
-      <div class="card" id="onGamesCard" hidden>
-        <div class="card-h">My games</div>
-        <div class="op-lines" id="onGames"></div>
-      </div>
       <div class="card" id="onFriendsCard" hidden>
         <div class="card-h">Friends</div>
         <div class="inrow"><input id="onFriendName" placeholder="Friend's username" autocomplete="off" spellcheck="false"><button class="btn primary" data-on="addfriend">+ Add</button></div>
         <div id="onFriends"></div>
+      </div>
+      <div class="card" id="onGamesCard" hidden>
+        <div class="card-h">My games</div>
+        <div class="op-lines" id="onGames"></div>
       </div>
     </div>
   </aside>

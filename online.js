@@ -43,6 +43,10 @@ async function onInit() {
   } catch { N.offline = true; onRender(); return; }
   firebase.initializeApp(cfg);
   N.auth = firebase.auth(); N.db = firebase.firestore();
+  // Firestore's default streaming connection gets held back by many proxies, antivirus HTTPS scanners and
+  // mobile networks — updates then only arrive when the stream times out (~1 minute). Long polling
+  // hands each change over the moment it happens, on every network.
+  N.db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true });
   if (EMU) { N.auth.useEmulator('http://127.0.0.1:9099'); N.db.useEmulator('127.0.0.1', 8080); }
   N.ready = true;
   N.auth.onAuthStateChanged(u => (u ? signedIn(u) : signedOut()));
@@ -138,6 +142,12 @@ async function createGame(friendUid, size, side) {
   const ref = await N.db.collection('games').add(g);
   N.dlg = null; openGame(ref.id);
 }
+// One tap: 1 vs 1 with a random colour. Re-uses an open challenge to the same friend instead of stacking new ones.
+async function quickPlay(uid) {
+  const open = N.games.find(g => g.status === 'waiting' && g.size === 2 && g.createdBy === N.me.uid && g.invited.includes(uid));
+  if (open) return openGame(open.id);
+  await createGame(uid, 2, Math.random() < 0.5 ? 'w' : 'b');
+}
 async function invite(gid, uid) {
   const f = N.friends.find(x => x.uid === uid); if (!f) return;
   await N.db.collection('games').doc(gid).update({ invited: FV().arrayUnion(uid), [`names.${uid}`]: f.name, updatedAt: Date.now() });
@@ -168,23 +178,39 @@ async function cancelGame(gid) {
 function openGame(gid) {
   if (N.gUnsub) N.gUnsub();
   N.gid = gid; N.game = null; N.prevPly = -1; selected = null;
-  N.gUnsub = N.db.collection('games').doc(gid).onSnapshot(d => {
-    if (!d.exists) return closeGame();
-    const g = { id: d.id, ...d.data() };
-    const c = new Chess(); for (const san of g.moves) c.move(san);
-    const newPly = g.moves.length, isNew = N.prevPly >= 0 && newPly > N.prevPly;
-    N.game = g; N.chess = c;
-    if (N.prevPly < 0) flip.online = myColor(g) === 'b';
-    if (isNew) { const h = c.history({ verbose: true }), m = h[h.length - 1]; if (m && g.moves.length - 1 !== N.myLastPly) { moveSound(m); onDraw(moveAnim(m)); } }
-    if (isNew && g.status === 'playing' && seatAt(g, newPly) === N.me.uid) sfx('check');
-    if (g.status === 'over' && N.prevStatus === 'playing') sfx('end');
-    N.prevPly = newPly; N.prevStatus = g.status;
-    onRender();
-  }, e => { setMsg('Could not open the game: ' + esc(e.message)); closeGame(); });
+  const ref = N.db.collection('games').doc(gid);
+  N.gUnsub = ref.onSnapshot(d => applyGame(d), e => { setMsg('Could not open the game: ' + esc(e.message)); closeGame(); });
+  // Safety net: while waiting for the other side, ask the server directly every few seconds,
+  // so a sleepy connection (phone in the background, flaky Wi-Fi) can never stall the game.
+  clearInterval(N.poll);
+  N.poll = setInterval(() => { if (document.visibilityState === 'visible' && N.game && N.game.status !== 'over' && !myTurn()) syncGame(); }, 4000);
   if (mode !== 'online') setMode('online');
   onRender();
 }
-function closeGame() { if (N.gUnsub) N.gUnsub(); N.gUnsub = null; N.gid = null; N.game = null; onRender(); }
+function syncGame() {
+  if (!N.gid) return;
+  const gid = N.gid;
+  N.db.collection('games').doc(gid).get({ source: 'server' }).then(d => { if (N.gid === gid) applyGame(d); }).catch(() => {});
+}
+function applyGame(d) {
+  if (!d.exists) return closeGame();
+  const g = { id: d.id, ...d.data() };
+  // ignore anything older than what we already show (the poll and the live listener can cross)
+  if (N.game && N.game.id === g.id && (g.moves.length < N.game.moves.length || (g.moves.length === N.game.moves.length && g.status === N.game.status
+      && (g.updatedAt || 0) <= (N.game.updatedAt || 0)))) return;
+  const c = new Chess(); for (const san of g.moves) c.move(san);
+  const newPly = g.moves.length, isNew = N.prevPly >= 0 && newPly > N.prevPly;
+  N.game = g; N.chess = c;
+  if (N.prevPly < 0) flip.online = myColor(g) === 'b';
+  if (isNew) { const h = c.history({ verbose: true }), m = h[h.length - 1]; if (m && g.moves.length - 1 !== N.myLastPly) { moveSound(m); onDraw(moveAnim(m)); } }
+  if (isNew && g.status === 'playing' && seatAt(g, newPly) === N.me.uid) sfx('check');
+  if (g.status === 'over' && N.prevStatus === 'playing') sfx('end');
+  N.prevPly = newPly; N.prevStatus = g.status;
+  onRender();
+}
+// Coming back to the app (phone unlocked, tab switched back): catch up at once instead of waiting for a reconnect.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && N.me) { beat(); syncGame(); } });
+function closeGame() { if (N.gUnsub) N.gUnsub(); N.gUnsub = null; clearInterval(N.poll); N.gid = null; N.game = null; onRender(); }
 const myTurn = () => N.game && N.game.status === 'playing' && seatAt(N.game, N.game.moves.length) === N.me.uid;
 async function onMove(from, to, promo) {
   selected = null;
@@ -202,14 +228,9 @@ async function onMove(from, to, promo) {
     if (c.in_checkmate()) { upd.result = m.color === 'w' ? '1-0' : '0-1'; upd.reason = 'checkmate'; }
     else { upd.result = '1/2-1/2'; upd.reason = c.in_stalemate() ? 'stalemate' : c.insufficient_material() ? 'insufficient material' : c.in_threefold_repetition() ? 'repetition' : '50-move rule'; }
   }
-  const ref = N.db.collection('games').doc(g.id), ply = g.moves.length;
-  try {
-    await N.db.runTransaction(async tx => {
-      const s = await tx.get(ref), cur = s.data();
-      if (cur.status !== 'playing' || cur.moves.length !== ply) throw new Error('The game changed — try again.');
-      tx.update(ref, upd);
-    });
-  } catch (e) { setMsg(esc(e.message)); }
+  // A plain write (not a transaction): one round trip, and the board/turn update locally at once.
+  // Only one player owns each ply, so two people can never write the same move.
+  N.db.collection('games').doc(g.id).update(upd).catch(e => { setMsg('Move not sent: ' + esc(e.message)); syncGame(); });
   return true;
 }
 async function resign() {
@@ -239,7 +260,7 @@ function renderAccountChip() {
 function gameCard(g) {
   const ply = g.moves.length, turn = g.status === 'playing' ? seatAt(g, ply) : null;
   const vs = `${g.w.map(u => nm(g, u)).join(' + ') || '…'} <span class="pz-s">vs</span> ${g.b.map(u => nm(g, u)).join(' + ') || '…'}`;
-  const tag = g.status === 'waiting' ? '<span class="tag">waiting for players</span>' : g.status === 'over' ? `<span class="tag">${esc(g.result)}</span>`
+  const tag = g.status === 'waiting' ? `<span class="tag">${g.size === 2 && g.invited.length ? 'waiting for ' + esc(nm(g, g.invited[0])) : 'waiting for players'}</span>` : g.status === 'over' ? `<span class="tag">${esc(g.result)}</span>`
     : turn === N.me.uid ? '<span class="tag lvl">your turn!</span>' : `<span class="tag">${esc(nm(g, turn))} to move</span>`;
   return `<button class="op-line${g.id === N.gid ? ' on' : ''}" data-game="${g.id}"><span class="st on-size" title="${g.size} players">👥${g.size}</span><span class="nm">${vs}</span>${tag}</button>`;
 }
@@ -261,6 +282,8 @@ function onRender() {
   $('onInvites').hidden = !inv.length;
   $('onInvites').innerHTML = `<div class="card-h">⚔ Challenges for you</div>` + inv.map(g => {
     const sides = openSides(g), by = nm(g, g.createdBy);
+    if (g.size === 2 && sides.length === 1) return `<div class="on-inv"><div><b>${esc(by)}</b> wants to play you! You'll be <b>${sideName(sides[0])}</b>.</div>
+      <div class="row"><button class="btn primary" data-join="${g.id}" data-side="${sides[0]}">✓ Accept</button><button class="btn" data-decline="${g.id}">✕ Decline</button></div></div>`;
     const seats = c => g[c].map(u => esc(nm(g, u))).join(' + ');
     const btn = c => `<button class="btn${c === 'w' ? '' : ''}" data-join="${g.id}" data-side="${c}">Join ${sideName(c)}${g[c].length ? ` (with ${seats(c)})` : ''}</button>`;
     return `<div class="on-inv"><div><b>${esc(by)}</b> invites you to a <b>${g.size}-player</b> game</div>
@@ -271,7 +294,7 @@ function onRender() {
   if (N.dlg) {
     const d = N.dlg, f = N.friends.find(x => x.uid === d.uid);
     $('onDlg').hidden = false;
-    $('onDlg').innerHTML = `<div class="card-h">Challenge ${esc(f ? f.name : '')}</div>
+    $('onDlg').innerHTML = `<div class="ana-top"><span class="card-h">More with ${esc(f ? f.name : '')}</span><button class="linkbtn" data-unfriend="${d.uid}">Remove friend</button></div>
       <div class="field"><label>PLAYERS</label><div class="seg" id="dlgSize">${[2, 3, 4].map(n => `<button data-size="${n}" class="${d.size === n ? 'on' : ''}">${n === 2 ? '1 vs 1' : n === 3 ? '3 players' : '4 players (2v2)'}</button>`).join('')}</div>
       <div class="pz-s" style="margin-top:6px">${d.size === 2 ? 'Normal game.' : d.size === 3 ? 'Two players share one side and take turns: e.g. you → Black → your teammate → Black → you…' : 'Two teams of two. Order: White 1 → Black 1 → White 2 → Black 2 → …'}${d.size > 2 ? ' Invite the other player(s) from the lobby.' : ''}</div></div>
       <div class="field"><label>YOU PLAY</label><div class="seg" id="dlgSide"><button data-side="w" class="${d.side === 'w' ? 'on' : ''}">♔ White</button><button data-side="b" class="${d.side === 'b' ? 'on' : ''}">♚ Black</button></div></div>
@@ -284,7 +307,10 @@ function onRender() {
     const order = turnOrder(g), ply = g.moves.length, nowUid = g.status === 'playing' ? seatAt(g, ply) : null;
     const strip = g.status === 'waiting' ? '' : `<div class="on-order">${order.map((o, i) => `<span class="${o.uid === nowUid && i === ply % order.length ? 'now' : ''} ${o.color}">${o.color === 'w' ? '♔' : '♚'} ${esc(nm(g, o.uid))}</span>`).join('<i>→</i>')}</div>`;
     let head;
-    if (g.status === 'waiting') {
+    if (g.status === 'waiting' && g.size === 2) {
+      const who = g.invited.length ? g.invited.map(u => esc(nm(g, u))).join(', ') : 'a friend';
+      head = `<div class="pz-h"><span class="pz-ic">⏳</span><div><div class="pz-t">Waiting for ${who} to accept…</div><div class="pz-s">You play ${sideName(myColor(g))} · the game starts the moment they tap Accept</div></div></div>`;
+    } else if (g.status === 'waiting') {
       const need = g.size - g.w.length - g.b.length;
       const seats = c => { const cap = g.size === 2 ? 1 : 2; let s = g[c].map(u => `<span class="tag">${esc(nm(g, u))}</span>`).join(''); for (let i = g[c].length; i < cap; i++) s += '<span class="tag on-empty">empty</span>'; return s; };
       const canInvite = N.friends.filter(f => !g.members.includes(f.uid) && !g.invited.includes(f.uid));
@@ -307,10 +333,12 @@ function onRender() {
   }
   // friends
   if (signed) {
-    $('onFriends').innerHTML = N.friends.length ? N.friends.map(f => {
+    // online friends first
+    const fl = [...N.friends].sort((a, b) => isOnline(N.fdocs[b.uid]) - isOnline(N.fdocs[a.uid]));
+    $('onFriends').innerHTML = fl.length ? fl.map(f => {
       const on = isOnline(N.fdocs[f.uid]);
-      return `<div class="on-friend"><span class="on-dot ${on ? 'on' : ''}" title="${on ? 'online' : 'offline'}"></span><span class="nm">${esc(f.name)}</span>
-        <button class="btn" data-chal="${f.uid}">⚔ Challenge</button><button class="linkbtn" data-unfriend="${f.uid}" title="Remove friend">✕</button></div>`;
+      return `<div class="on-friend"><span class="on-dot ${on ? 'on' : ''}"></span><span class="nm">${esc(f.name)}<small>${on ? 'online now' : 'offline'}</small></span>
+        <button class="btn primary" data-play="${f.uid}">▶ Play</button><button class="linkbtn on-more" data-chal="${f.uid}" title="Team games, remove friend">⋯</button></div>`;
     }).join('') : '<div class="pz-s">No friends yet — type a friend\'s username above. They need an account first.</div>';
     const act = N.games.filter(x => x.status !== 'over'), done = N.games.filter(x => x.status === 'over').slice(0, 5);
     $('onGames').innerHTML = (act.length ? act.map(gameCard).join('') : '<div class="pz-s">No active games. Challenge a friend!</div>') +
@@ -341,8 +369,9 @@ $('onlineView').onclick = async e => {
     else if (d.on === 'addfriend') await addFriend();
     else if (d.size) { N.dlg.size = +d.size; onRender(); }
     else if (d.side && t.closest('#dlgSide')) { N.dlg.side = d.side; onRender(); }
-    else if (d.chal) { N.dlg = { uid: d.chal, size: 2, side: 'w' }; N.msg = ''; onRender(); }
-    else if (d.unfriend) await removeFriend(d.unfriend);
+    else if (d.play) { N.msg = ''; await quickPlay(d.play); }
+    else if (d.chal) { N.dlg = N.dlg && N.dlg.uid === d.chal ? null : { uid: d.chal, size: 4, side: 'w' }; N.msg = ''; onRender(); }
+    else if (d.unfriend) { await removeFriend(d.unfriend); if (N.dlg && N.dlg.uid === d.unfriend) { N.dlg = null; onRender(); } }
     else if (d.join) await joinGame(d.join, d.side);
     else if (d.decline) await declineGame(d.decline);
     else if (d.invite) await invite(N.gid, d.invite);

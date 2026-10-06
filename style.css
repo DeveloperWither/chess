@@ -349,6 +349,8 @@ button, .sq { touch-action: manipulation; }
 .on-friend { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 .on-friend .nm { flex: 1; font-weight: 600; }
 .on-friend .btn { padding: 6px 12px; }
+.on-friend .nm small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.on-more { font-size: 20px; line-height: 1; padding: 2px 8px; text-decoration: none; }
 .on-dot { width: 10px; height: 10px; border-radius: 50%; background: #4a505c; flex: none; }
 .on-dot.on { background: var(--green2); box-shadow: 0 0 8px var(--green2); }
 .on-inv { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -363,3 +365,63 @@ button, .sq { touch-action: manipulation; }
 .on-order i { color: var(--faint); font-style: normal; }
 #onGames .op-line .tag { flex: none; }
 .on-size { width: auto !important; white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+/* ---------- Live coach (Play) ---------- */
+.coach-toggle { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted); cursor: pointer; user-select: none; }
+.coach-toggle input { display: none; }
+.coach-toggle .tg { width: 36px; height: 20px; border-radius: 999px; background: rgba(255,255,255,.12); position: relative; flex: none; transition: background .2s; }
+.coach-toggle .tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .25s cubic-bezier(.3,1.5,.5,1); }
+.coach-toggle input:checked + .tg { background: var(--green); }
+.coach-toggle input:checked + .tg::after { transform: translateX(16px); }
+.play-coach .coach-hd { min-width: 0; }
+.coach-x { margin-left: 4px; border: 0; background: none; color: var(--faint); cursor: pointer; font-size: 14px; padding: 4px; border-radius: 6px; flex: none; }
+.coach-x:hover { color: var(--ink); background: rgba(255,255,255,.08); }
+.play-coach .evchip { margin-left: auto; }
+.coach-act { display: flex; gap: 8px; } .coach-act .btn { flex: 1; }
+.kb.k-hint { background: linear-gradient(145deg, #f3cf7a, #c38e2c); }
+.kb.k-thinking { background: rgba(255,255,255,.08); }
+.bestline .bwhy { font-size: 13.5px; color: #cfd8c6; }
+.coach-b .why-line { font-size: 13px; color: var(--muted); } .coach-b .why-line b { font-size: 12.5px; color: #dfe6d8; }
+.coach-b .why-eval { font-size: 13px; color: var(--muted); }
+.coach-b .bestline { margin-top: 8px; }
+
+/* ---------- Motion ---------- */
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes glowPulse { 0%, 100% { box-shadow: 0 0 6px var(--green2); } 50% { box-shadow: 0 0 16px 3px var(--green2); } }
+@keyframes checkPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+@keyframes arrowIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes curPop { 0% { transform: scale(.9); } 60% { transform: scale(1.06); } 100% { transform: none; } }
+@keyframes burst { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes spark { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } }
+@keyframes confetti { 0% { transform: translate(0, -10vh) rotate(0); opacity: 1; } 100% { transform: translate(var(--dx), 105vh) rotate(var(--rot)); opacity: .9; } }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+
+.panel > .view:not([hidden]), .view > .view:not([hidden]) { animation: riseIn .35s cubic-bezier(.2,.8,.2,1) both; }
+.card { transition: border-color .25s, box-shadow .25s, transform .25s; }
+.card:hover { border-color: rgba(255,255,255,.13); }
+.anim-in { animation: riseIn .4s cubic-bezier(.2,.9,.25,1) both; }
+.coach::before { transition: background .4s; }
+.coach .kb.big { animation: pop .4s cubic-bezier(.2,1.6,.4,1); }
+.coach-b p, .coach-b .bestline { animation: riseIn .45s cubic-bezier(.2,.8,.2,1) both; }
+.coach-b > :nth-child(2) { animation-delay: .06s; } .coach-b > :nth-child(3) { animation-delay: .12s; }
+.coach-b > :nth-child(4) { animation-delay: .18s; } .coach-b > :nth-child(5) { animation-delay: .24s; }
+.turn-dot { animation: glowPulse 1.6s ease-in-out infinite; }
+.sq.check { animation: checkPulse .9s ease-in-out 2; }
+.sq.last::before { animation: fadeIn .3s ease-out; }
+.arrows polygon { transform-box: fill-box; transform-origin: center; animation: arrowIn .35s cubic-bezier(.2,1.3,.4,1) both; }
+.moves .m.cur { animation: curPop .3s ease-out; }
+.btn:active:not(:disabled) { transform: translateY(1px) scale(.97); transition-duration: .05s; }
+.btn.primary, .btn.accent { background-size: 200% 100%; position: relative; overflow: hidden; }
+.btn.primary::after, .btn.accent::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.28) 50%, transparent 70%) 0 0 / 200% 100%; }
+.btn.primary:hover::after, .btn.accent:hover::after { opacity: 1; animation: shimmer 1.1s linear infinite; }
+.progress .bar { background-size: 200% 100%; background-image: linear-gradient(90deg, #5f9a36, #95c95f, #5f9a36); animation: shimmer 2.2s linear infinite; }
+.fx-burst { position: absolute; inset: 8%; border-radius: 50%; border: 3px solid rgba(255,220,120,.9); pointer-events: none; z-index: 7; animation: burst .5s ease-out forwards; }
+.fx-spark { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; pointer-events: none; z-index: 7;
+            background: #ffd66e; box-shadow: 0 0 6px #ffb84a; animation: spark .55s cubic-bezier(.2,.7,.3,1) forwards; }
+.fx-confetti { position: fixed; top: 0; width: 9px; height: 14px; border-radius: 2px; pointer-events: none; z-index: 300; animation: confetti linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .fx-burst, .fx-spark, .fx-confetti { display: none; }
+}
