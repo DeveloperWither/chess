@@ -199,6 +199,11 @@ textarea { min-height: 120px; resize: vertical; font-family: "JetBrains Mono", m
 .bestline .ln { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #a9b8a0; }
 .nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .nav .btn { padding: 12px 0; font-size: 16px; }
+.nav.nav4 { grid-template-columns: repeat(4, 1fr); margin-top: 10px; }
+.nav.nav4 .btn:disabled { opacity: .35; cursor: default; }
+.nav.nav4.browsing [data-nav="last"] { background: var(--green); color: #fff; animation: navPulse 1.4s ease-in-out infinite; }
+@keyframes navPulse { 50% { filter: brightness(1.25); } }
+#moves .m[data-i] { cursor: pointer; } #moves .m[data-i]:hover { background: rgba(255,255,255,.06); }
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--green2); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty { text-align: center; color: var(--muted); padding: 20px 10px; font-size: 14px; }

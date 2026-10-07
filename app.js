@@ -320,15 +320,18 @@ playEngine.ready.then(() => { engineReady = true; updateStatus(); maybeEngineMov
 
 function drawPlay(anim) {
   if (mode !== 'play') return;
-  drawBoard({
+  const v = viewOf(game, 'play');
+  if (v.live) drawBoard({
     pos: game, last: lastMove, sel: selected, targets: selected ? game.moves({ square: selected, verbose: true }) : [],
     arrows: hintArrow ? [{ ...hintArrow, color: '#81b64c' }] : [], badge: coachBadge(), anim,
   });
+  else drawBoard({ pos: v.pos, last: v.last, anim });
   const L = LEVELS[+$('level').value], turn = game.turn(), over = game.game_over();
   const me = { name: 'You', av: '🙂', toMove: !over && turn === playerColor };
   const sf = { name: 'Stockfish', elo: L.name, av: '♞', toMove: !over && turn !== playerColor };
-  renderCards(game, playerColor === 'w' ? { w: me, b: sf } : { w: sf, b: me });
+  renderCards(v.pos, playerColor === 'w' ? { w: me, b: sf } : { w: sf, b: me });
   showEval(playScore);
+  syncNav('play');
 }
 function maybeEngineMove() {
   if (!engineReady || game.game_over() || game.turn() === playerColor || thinkJob) return;
@@ -354,7 +357,7 @@ function doMove(mv) {
   if (!res) return false;
   if (hintJob) { hintJob.cancel(); hintJob = null; }
   if (res.color === playerColor) coachMove(fb, res, game.history().length - 1);
-  lastMove = { from: res.from, to: res.to };
+  lastMove = { from: res.from, to: res.to }; VIEW.play = null;
   selected = null; hintArrow = null; gameId++;
   if (hintJob) { hintJob.cancel(); hintJob = null; }
   if (pendingAnim === false && res.captured) fxCapture(res.to);
@@ -383,18 +386,19 @@ function askPromotion(color, cb) {
   $('promo').classList.add('show');
 }
 function renderPlayMoves() {
-  const h = game.history(), el = $('moves');
+  const h = game.history(), el = $('moves'), at = VIEW.play == null ? h.length : VIEW.play;
   let html = '';
   const startNum = +game.fen().split(' ')[5] - Math.floor((h.length + (game.turn() === 'b' ? 1 : 0)) / 2);
   for (let i = 0; i < h.length; i += 2) {
     const cell = k => {
       const n = PC.notes[k], kb = n && n.kind ? `<i class="kb k-${n.kind}">${KINFO[n.kind].sym}</i>` : '';
-      return `<span class="m${k === h.length - 1 ? ' cur' : ''}${n && n.kind ? ' t-' + n.kind : ''}">${kb}${h[k] || ''}</span>`;
+      return `<span class="m${k === at - 1 ? ' cur' : ''}${n && n.kind ? ' t-' + n.kind : ''}"${h[k] ? ` data-i="${k + 1}"` : ''}>${kb}${h[k] || ''}</span>`;
     };
     html += `<span class="n">${startNum + i / 2}.</span>${cell(i)}${cell(i + 1)}`;
   }
   el.innerHTML = html || '<span></span><span class="m" style="color:var(--faint)">No moves yet</span>';
-  el.scrollTop = el.scrollHeight;
+  if (at === h.length) el.scrollTop = el.scrollHeight;
+  else { const c = el.querySelector('.m.cur'); if (c) c.scrollIntoView({ block: 'nearest' }); }
 }
 function setStatus(t) { $('status').textContent = t; }
 function updateStatus() {
@@ -410,7 +414,7 @@ function updateStatus() {
   setStatus('Stockfish is thinking…');
 }
 function newGame() {
-  stopThinking(); game.reset(); gameId++; lastMove = null; selected = null; hintArrow = null; playScore = null;
+  stopThinking(); game.reset(); gameId++; VIEW.play = null; lastMove = null; selected = null; hintArrow = null; playScore = null;
   resetCoach();
   flip.play = playerColor === 'b';
   $('info').textContent = '';
@@ -418,11 +422,54 @@ function newGame() {
   setTimeout(maybeEngineMove, 300);
 }
 
+// ---------- Browse earlier moves (⏮ ◀ ▶ ⏭ like chess.com) ----------
+// VIEW[mode] = ply being looked at, null = the live position. Moves are only made at the live position.
+const VIEW = { play: null };
+const BROWSE = { play: { chess: () => game, nav: 'playNav', redraw: a => { drawPlay(a); renderPlayMoves(); } } };
+function viewOf(c, m) {
+  const h = c.history({ verbose: true }), ply = VIEW[m];
+  if (ply == null || ply >= h.length) { VIEW[m] = null; const lm = h[h.length - 1]; return { live: true, pos: c, last: lm ? { from: lm.from, to: lm.to } : null }; }
+  for (let i = h.length; i > ply; i--) c.undo();
+  const pos = new Chess(c.fen());
+  for (let i = ply; i < h.length; i++) c.move(h[i].san);
+  const lm = h[ply - 1];
+  return { live: false, pos, last: lm ? { from: lm.from, to: lm.to } : null };
+}
+function browse(m, to) {
+  const B = BROWSE[m], c = B && B.chess(); if (!c) return;
+  const h = c.history({ verbose: true }), cur = VIEW[m] == null ? h.length : VIEW[m];
+  to = Math.max(0, Math.min(h.length, to));
+  if (to === cur) return;
+  VIEW[m] = to === h.length ? null : to; selected = null;
+  let anim = null;
+  if (to === cur + 1) { anim = moveAnim(h[to - 1]); moveSound(h[to - 1]); }
+  else if (to === cur - 1) { anim = moveAnim(h[cur - 1], true); sfx('move'); }
+  B.redraw(anim);
+}
+function browseStep(m, key) {
+  const c = BROWSE[m].chess(); if (!c) return;
+  const n = c.history().length, cur = VIEW[m] == null ? n : VIEW[m];
+  browse(m, { first: 0, prev: cur - 1, next: cur + 1, last: n }[key]);
+}
+const backToLive = m => { if (VIEW[m] == null) return false; browse(m, Infinity); return true; };
+function syncNav(m) {
+  const el = $(BROWSE[m].nav), c = BROWSE[m].chess(); if (!el) return;
+  const n = c ? c.history().length : 0, cur = VIEW[m] == null ? n : VIEW[m];
+  el.querySelectorAll('[data-nav]').forEach(b => (b.disabled = ['first', 'prev'].includes(b.dataset.nav) ? cur <= 0 : cur >= n));
+  el.classList.toggle('browsing', cur < n);
+}
+function hookNav(m) {
+  $(BROWSE[m].nav).onclick = e => { const b = e.target.closest('[data-nav]'); if (b) browseStep(m, b.dataset.nav); };
+}
+hookNav('play');
+$('moves').onclick = e => { const x = e.target.closest('.m[data-i]'); if (x) browse('play', +x.dataset.i); };
+
 // ---------- Input (click + drag) ----------
 let drag = null;
 const playCtl = {
   pos: () => game, draw: () => drawPlay(), move: (f, t, anim) => tryUserMove(f, t, anim),
   canPick: p => p.color === playerColor && game.turn() === playerColor && !thinkJob && !game.game_over(),
+  click: () => backToLive('play'),
 };
 // Tabs defined in their own files register { view, ctl, draw, init, enter, leave, flip } here.
 const EXTRA_MODES = {};
@@ -471,7 +518,7 @@ document.querySelectorAll('#sideSeg button').forEach(b => (b.onclick = () => {
 }));
 $('undoBtn').onclick = () => {
   if (!game.history().length) return;
-  stopThinking(); gameId++;
+  stopThinking(); gameId++; VIEW.play = null;
   game.undo();
   if (game.turn() !== playerColor) game.undo();
   const h = game.history({ verbose: true }), lm = h[h.length - 1];
@@ -1141,7 +1188,7 @@ $('graph').onclick = e => {
 $('playHereBtn').onclick = () => {
   const fen = R.fens[R.idx]; if (!fen) return;
   setMode('play');
-  stopThinking(); game.load(fen); gameId++;
+  stopThinking(); game.load(fen); gameId++; VIEW.play = null;
   playerColor = game.turn(); flip.play = playerColor === 'b';
   document.querySelectorAll('#sideSeg button').forEach(x => x.classList.toggle('on', x.dataset.side === playerColor));
   const m = R.moves[R.idx - 1]; lastMove = m ? { from: m.from, to: m.to } : null; selected = null; hintArrow = null; playScore = R.evals[R.idx] || null;
@@ -1186,7 +1233,7 @@ function restorePlay() {
     playerColor = p.color; flip.play = playerColor === 'b';
     document.querySelectorAll('#sideSeg button').forEach(x => x.classList.toggle('on', x.dataset.side === playerColor));
   }
-  stopThinking(); gameId++;
+  stopThinking(); gameId++; VIEW.play = null;
   if (p.pgn && game.load_pgn(p.pgn)) {
     const h = game.history({ verbose: true }), lm = h[h.length - 1];
     lastMove = lm ? { from: lm.from, to: lm.to } : null;
@@ -2084,6 +2131,10 @@ document.addEventListener('keydown', e => {
     else if (e.key === 'ArrowLeft') { setIdx(R.idx - 1); e.preventDefault(); }
     else if (e.key === 'Home') setIdx(0);
     else if (e.key === 'End') setIdx(R.fens.length - 1);
+  }
+  if (BROWSE[mode] && VIEW[mode] !== undefined) {
+    const k = { ArrowLeft: 'prev', ArrowRight: 'next', Home: 'first', End: 'last' }[e.key];
+    if (k) { browseStep(mode, k); e.preventDefault(); }
   }
   if (mode === 'puzzle' && P.ana) {
     if (e.key === 'ArrowLeft') { anaUndo(); e.preventDefault(); }

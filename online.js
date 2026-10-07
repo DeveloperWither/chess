@@ -260,6 +260,7 @@ function applyGame(d) {
       && (g.updatedAt || 0) <= (N.game.updatedAt || 0)))) return;
   const c = new Chess(); for (const san of g.moves) c.move(san);
   const newPly = g.moves.length, isNew = N.prevPly >= 0 && newPly > N.prevPly;
+  if (!N.game || N.game.id !== g.id || isNew) VIEW.online = null;
   N.game = g; N.chess = c;
   if (N.prevPly < 0) flip.online = myColor(g) === 'b';
   if (isNew) { const h = c.history({ verbose: true }), m = h[h.length - 1]; if (m && g.moves.length - 1 !== N.myLastPly) { moveSound(m); onDraw(moveAnim(m)); } }
@@ -289,7 +290,7 @@ async function onMove(from, to, promo) {
   const c = new Chess(); for (const s of g.moves) c.move(s);
   const m = c.move({ from, to, promotion: promo || undefined }); if (!m) return false;
   // show it straight away; the database confirms it a moment later
-  N.chess = c; N.myLastPly = g.moves.length; moveSound(m); onDraw();
+  N.chess = c; N.myLastPly = g.moves.length; VIEW.online = null; moveSound(m); onDraw();
   const upd = { moves: [...g.moves, m.san], updatedAt: Date.now() };
   if (c.game_over()) {
     upd.status = 'over';
@@ -449,13 +450,13 @@ function onDraw(anim) {
   if (mode !== 'online') return;
   const g = N.game;
   if (!g || !N.chess) { drawBoard({ pos: new Chess() }); renderCards(new Chess(), { w: { name: 'White', av: 'W' }, b: { name: 'Black', av: 'B' } }); showEval(null); return; }
-  const h = N.chess.history({ verbose: true }), lm = h[h.length - 1];
-  drawBoard({ pos: N.chess, last: lm ? { from: lm.from, to: lm.to } : null, sel: selected, targets: selected ? N.chess.moves({ square: selected, verbose: true }) : [], anim });
+  const v = viewOf(N.chess, 'online');
+  drawBoard({ pos: v.pos, last: v.last, sel: v.live ? selected : null, targets: v.live && selected ? N.chess.moves({ square: selected, verbose: true }) : [], anim });
   const ply = g.moves.length, now = g.status === 'playing' ? seatAt(g, ply) : null;
   const team = c => ({ name: g[c].map(u => nm(g, u)).join(' + ') || '(empty)', av: c === 'w' ? '♔' : '♚', elo: g[c].length > 1 ? `team of ${g[c].length}` : null,
                        toMove: now && g[c].includes(now) });
-  renderCards(N.chess, { w: team('w'), b: team('b') });
-  showEval(null);
+  renderCards(v.pos, { w: team('w'), b: team('b') });
+  showEval(null); syncNav('online');
 }
 function renderAccountChip() {
   const b = $('acctBtn'); if (!b) return;
@@ -519,7 +520,7 @@ function onRender() {
   } else $('onDlg').hidden = true;
   // current game / lobby
   const g = N.game;
-  $('onGame').hidden = !g; $('onGameBtns').hidden = !g;
+  $('onGame').hidden = !g; $('onGameBtns').hidden = !g; $('onNav').hidden = !g || !g.moves.length;
   if (g) {
     const order = turnOrder(g), ply = g.moves.length, nowUid = g.status === 'playing' ? seatAt(g, ply) : null;
     const strip = g.status === 'waiting' ? '' : `<div class="on-order">${order.map((o, i) => `<span class="${o.uid === nowUid && i === ply % order.length ? 'now' : ''} ${o.color}">${o.color === 'w' ? '♔' : '♚'} ${esc(nm(g, o.uid))}</span>`).join('<i>→</i>')}</div>`;
@@ -619,10 +620,14 @@ $('onReview').onclick = () => {
   setMode('review');
   loadReview(c.pgn(), { white: g.w.map(u => nm(g, u)).join(' + '), black: g.b.map(u => nm(g, u)).join(' + '), userColor: myColor(g) || 'w' });
 };
+// ◀ ▶ browsing of earlier moves (shared helpers in app.js)
+VIEW.online = null;
+BROWSE.online = { chess: () => N.chess, nav: 'onNav', redraw: a => onDraw(a) };
+hookNav('online');
 EXTRA_MODES.online = {
   view: 'onlineView',
   ctl: { pos: () => N.chess || new Chess(), draw: () => onDraw(), move: (f, t) => { if (!myTurn() || !N.chess.moves({ square: f, verbose: true }).some(m => m.to === t)) return false; onMove(f, t).catch(e => setMsg(esc(e.message))); return true; },
-         canPick: p => myTurn() && p.color === N.chess.turn() },
+         canPick: p => myTurn() && p.color === N.chess.turn(), click: () => backToLive('online') },
   draw: () => onDraw(),
   init: () => { onInit(); onRender(); },
   enter: () => { N.msg = ''; onRender(); markRead(); },
