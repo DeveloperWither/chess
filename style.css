@@ -568,3 +568,10 @@ button, .sq { touch-action: manipulation; }
 .wk-bar i { display: block; height: 100%; border-radius: 999px; }
 .wk-bar i.lo { background: var(--k-blunder); } .wk-bar i.mid { background: var(--k-inaccuracy); } .wk-bar i.hi { background: var(--accent); }
 .wk-n { text-align: right; font-weight: 600; } .wk-n small { font-weight: 400; color: var(--faint); font-size: 11px; }
+
+/* clock bonus flash, eval in words */
+.incflash { font: 700 12px "JetBrains Mono", monospace; color: var(--accent); margin-left: 6px; animation: incf 1.5s ease-out forwards; }
+@keyframes incf { 0% { opacity: 0; transform: translateY(4px); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
+.evalsay { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.mine-tag { display: inline-block; margin-top: 8px; padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text, inherit); }
+.mine-card .inrow { margin-top: 6px; }

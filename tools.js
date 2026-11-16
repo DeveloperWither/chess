@@ -395,6 +395,150 @@ function bankAdd(e) {
   saveProgress();
 }
 const bankDue = () => (prog.bank || []).filter(x => x.lvl < IVL.length && x.due <= Date.now());
+function bankGrade(x, right) {
+  if (right) { x.lvl++; x.due = Date.now() + (IVL[Math.min(x.lvl - 1, IVL.length - 1)] * DAY) - 3600e3; }
+  else { x.lvl = 0; x.due = Date.now() + DAY - 3600e3; }
+  x.reps++; saveProgress();
+}
+
+// ---------------------------------------------------------------- Puzzles from your Chess.com games
+// Stockfish goes through your recent Chess.com games and saves every big mistake (into the same bank as "My mistakes").
+// The Puzzles tab then mixes in (about 4 in 10) either the exact position from your game, or a different puzzle with
+// the same idea (fork, hanging piece, mate in 1…) or from the opening you play.
+const MINE = { on: store.get('pzMine', true), busy: false, msg: '' };
+const mineUser = () => store.get('user', '') || 'cheszwither';
+function openingKey(pgn) {
+  const m = /\[ECOUrl "[^"]*\/openings\/([^"]+)"\]/.exec(pgn || ''); if (!m) return null;
+  const w = decodeURIComponent(m[1]).replace(/^Caro-Kann/, 'Caro~Kann').split('-');
+  const i = w.findIndex(x => /^(Game|Defense|Opening|Gambit|Attack|System)$/.test(x));
+  if (i < 0 || i > 4) return null;
+  let k = w.slice(0, i + 1).join('_').replace('~', '-');
+  if (/Pawn_Opening$/.test(k)) k = k.replace(/Opening$/, 'Game');
+  return k;
+}
+async function scanChessCom(user, max, say) {
+  user = (user || '').trim().toLowerCase(); if (!user) throw new Error('Type your Chess.com username first.');
+  store.set('user', user);
+  say('Fetching games from Chess.com…');
+  const r = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/archives`);
+  if (!r.ok) throw new Error(r.status === 404 ? 'No Chess.com player with that name.' : 'Chess.com error ' + r.status);
+  const { archives = [] } = await r.json();
+  const seen = new Set(prog.bankScanned || []);
+  let games = [];
+  for (let a = archives.length - 1; a >= 0 && games.length < max && a >= archives.length - 3; a--) {
+    const d = await (await fetch(archives[a])).json();
+    games = games.concat((d.games || []).filter(g => g.rules === 'chess' && g.pgn && !seen.has(g.url)).reverse());
+  }
+  games = games.slice(0, max);
+  if (!games.length) return { added: 0, games: 0 };
+  let added = 0;
+  const ops = (prog.mineOpen = prog.mineOpen || {});
+  for (let gi = 0; gi < games.length; gi++) {
+    const g = games[gi], c = new Chess();
+    if (!c.load_pgn(g.pgn, { sloppy: true })) continue;
+    const me = g.white.username.toLowerCase() === user ? 'w' : 'b';
+    const ok = openingKey(g.pgn); if (ok) ops[ok] = (ops[ok] || 0) + 1;
+    const h = c.history({ verbose: true }), p = new Chess(c.header().FEN || undefined);
+    const name = `vs ${me === 'w' ? g.black.username : g.white.username}`;
+    for (let k = 0; k < h.length; k++) {
+      const fb = p.fen(); p.move(h[k].san);
+      if (h[k].color !== me || k < 6) continue;
+      say(`Game ${gi + 1}/${games.length} (${name}) · move ${Math.floor(k / 2) + 1}… ${added} mistakes found`);
+      const uci = h[k].from + h[k].to + (h[k].promotion || '');
+      const j = await judge(fb, uci, null, toolSearch, { depth: 10, movetime: 260 });
+      if (j && j.loss >= 15) {
+        const before = (prog.bank || []).length;
+        bankAdd({ fen: fb, best: j.best.pv[0], line: j.best.pv.slice(0, 8), played: h[k].san, loss: j.loss, src: 'chess.com', game: name });
+        if ((prog.bank || []).length > before) added++;
+      }
+    }
+    (prog.bankScanned = prog.bankScanned || []).push(g.url); saveProgress();
+  }
+  return { added, games: games.length };
+}
+// What kind of mistake was it? (Lichess puzzle theme names, so we can find puzzles with the same idea.)
+function mineTags(x) {
+  if (x.tags) return x.tags;
+  const t = new Set();
+  try {
+    const side = x.fen.split(' ')[1], line = x.line && x.line.length ? x.line : [x.best];
+    const g = new Chess(x.fen); let n = 0, mate = false;
+    for (const u of line) { if (!g.move(uciMove(u))) break; n++; if (g.in_checkmate()) { mate = true; break; } }
+    if (mate) { const mv = Math.ceil(n / 2); t.add(mv <= 1 ? 'mateIn1' : mv === 2 ? 'mateIn2' : 'mateIn3'); }
+    if (forkInfo(x.fen, x.best)) t.add('fork');
+    const c = new Chess(x.fen), first = c.move(uciMove(x.best)), sw = materialSwing(x.fen, line, side);
+    if (first && first.captured && sw.delta >= 2) t.add('hangingPiece');
+    if (x.played) { const p = new Chess(x.fen), pm = p.move(x.played, { sloppy: true }); if (pm && threatened(p.fen()).net >= 2) t.add('hangingPiece'); }
+    if (!t.size) t.add(sw.delta >= 2 ? 'advantage' : 'defensiveMove');
+  } catch { t.add('advantage'); }
+  return (x.tags = [...t]);
+}
+const MINE_WORD = { mateIn1: 'missed mates in 1', mateIn2: 'missed mates in 2', mateIn3: 'missed mates', fork: 'forks', hangingPiece: 'hanging pieces',
+                    advantage: 'winning chances you missed', defensiveMove: 'defending' };
+function mineTagCounts() {
+  const n = {}; for (const x of prog.bank || []) for (const tg of mineTags(x)) n[tg] = (n[tg] || 0) + 1;
+  return n;
+}
+const mineWeighted = obj => { const e = Object.entries(obj); let r = Math.random() * e.reduce((a, [, v]) => a + v, 0); for (const [k, v] of e) if ((r -= v) <= 0) return k; return e.length ? e[0][0] : null; };
+function mineExact(x) {
+  return { id: 'my-' + x.id, fen: x.fen, last: '', sol: [x.best], r: prog.rating, th: mineTags(x),
+           mine: { kind: 'exact', bankId: x.id, game: x.game, played: x.played, line: x.line } };
+}
+// Called by the Puzzles tab before it picks a normal puzzle. Returns a puzzle, or null for a normal one.
+async function minePick(range) {
+  const B = prog.bank || [];
+  if (!MINE.on || !B.length || Math.random() > 0.4) return null;
+  const now = Date.now(), seen = (prog.mineSeen = prog.mineSeen || {});
+  if (Math.random() < 0.35) { // the very same position from your game
+    const xs = B.filter(x => x.lvl < IVL.length && !(seen[x.id] > now - DAY / 2));
+    const due = xs.filter(x => x.due <= now), pool = due.length ? due : xs;
+    if (pool.length) { const x = pool[Math.floor(Math.random() * pool.length)]; seen[x.id] = now; return mineExact(x); }
+  }
+  // a different puzzle with the same idea
+  const [lo, hi] = range, mid = (lo + hi) / 2;
+  const fresh = p => !prog.solved[p.id] && !prog.failed[p.id] && (!P.cur || p.id !== P.cur.id);
+  const opens = prog.mineOpen || {};
+  if (Object.keys(opens).length && Math.random() < 0.25) {
+    const key = mineWeighted(opens), p = await fetchOnlinePuzzle(key);
+    if (p) return { ...p, mine: { kind: 'opening', tag: key.replace(/_/g, ' ') } };
+  }
+  const tag = mineWeighted(mineTagCounts()); if (!tag) return null;
+  const src = B.filter(x => mineTags(x).includes(tag)).pop();
+  let cands = [];
+  for (const w of [250, 450, 800]) { cands = PZ_POOL.filter(p => fresh(p) && (p.th || []).includes(tag) && Math.abs(p.r - mid) < w); if (cands.length) break; }
+  let p = cands.length ? cands[Math.floor(Math.random() * cands.length)] : await fetchOnlinePuzzle(tag);
+  return p ? { ...p, mine: { kind: 'similar', tag, game: src && src.game, played: src && src.played } } : null;
+}
+function renderMineCard() {
+  const el = document.getElementById('mineCard'); if (!el) return;
+  const B = prog.bank || [], counts = Object.entries(mineTagCounts()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const top = counts.map(([k]) => MINE_WORD[k] || themeName(k)).join(', ');
+  el.innerHTML = `<div class="card-h">🎯 Puzzles from your games</div>
+    <div class="pz-s">${B.length ? `Stockfish has found <b>${B.length}</b> mistakes in your games. About 4 in 10 puzzles are now your own positions or new puzzles with the same idea${top ? ` — mostly <b>${esc(top)}</b>` : ''}.`
+      : 'Stockfish checks your Chess.com games, finds your mistakes, and mixes those positions — plus similar puzzles — into your puzzles.'}</div>
+    <label class="coach-toggle" style="margin-top:8px"><input type="checkbox" id="mineOn" ${MINE.on ? 'checked' : ''}><span class="tg"></span><span><b>Mix them into my puzzles</b></span></label>
+    <div class="inrow"><input id="mineUser" value="${esc(mineUser())}" placeholder="Chess.com username" autocomplete="off" spellcheck="false"><button class="btn" id="mineScan" ${MINE.busy ? 'disabled' : ''}>${MINE.busy ? 'Scanning…' : 'Scan new games'}</button></div>
+    <div class="pz-s" id="mineMsg">${esc(MINE.msg)}</div>`;
+}
+async function mineScan(manual) {
+  if (MINE.busy) return;
+  const inp = document.getElementById('mineUser'), user = inp ? inp.value : mineUser();
+  const say = m => { MINE.msg = m; const e = document.getElementById('mineMsg'); if (e) e.textContent = m; };
+  MINE.busy = true; renderMineCard();
+  try {
+    const r = await scanChessCom(user, manual ? 10 : 5, say);
+    prog.mineScanAt = Date.now(); saveProgress();
+    MINE.msg = r.games ? `Done — ${r.added} new mistake${r.added === 1 ? '' : 's'} found in ${r.games} game${r.games === 1 ? '' : 's'}.` : 'No new games — everything recent is already scanned.';
+  } catch (e) { MINE.msg = e instanceof TypeError ? 'Could not reach Chess.com (no internet?).' : e.message; }
+  MINE.busy = false; renderMineCard();
+}
+// When the Puzzles tab opens: look at new games quietly, at most twice a day.
+function mineAutoScan() {
+  renderMineCard();
+  if (MINE.on && !MINE.busy && Date.now() - (prog.mineScanAt || 0) > DAY / 2) mineScan(false);
+}
+document.addEventListener('change', e => { if (e.target.id === 'mineOn') { MINE.on = e.target.checked; store.set('pzMine', MINE.on); } });
+document.addEventListener('click', e => { if (e.target.id === 'mineScan') mineScan(true); });
 function harvestReview() {
   if (!R.meta || !R.meta.userKnown) return;
   const me = R.meta.userColor, game = `${R.meta.white} vs ${R.meta.black}${R.meta.date ? ' · ' + R.meta.date : ''}`;
@@ -422,43 +566,15 @@ function BankTool() {
     draw();
   }
   async function scan() {
-    const user = ($('bkUser').value || '').trim().toLowerCase(); if (!user) return;
-    store.set('user', user);
-    const tok = S.tok, say = t => { S.scan = t; const el = document.getElementById('bkMsg'); if (el) el.textContent = t; };
-    say('Fetching games from Chess.com…');
+    if (MINE.busy) return;
+    const tok = S.tok, say = m => { S.scan = m; const el = document.getElementById('bkMsg'); if (el) el.textContent = m; };
+    MINE.busy = true;
     try {
-      const r = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/archives`);
-      if (!r.ok) throw new Error(r.status === 404 ? 'No Chess.com player with that name.' : 'Chess.com error ' + r.status);
-      const { archives = [] } = await r.json();
-      let games = [];
-      for (let a = archives.length - 1; a >= 0 && games.length < 5 && a >= archives.length - 3; a--) {
-        const d = await (await fetch(archives[a])).json();
-        games = games.concat((d.games || []).filter(g => g.rules === 'chess' && g.pgn).reverse());
-      }
-      const seen = new Set(prog.bankScanned || []);
-      games = games.filter(g => !seen.has(g.url)).slice(0, 5);
-      if (!games.length) { say('No new games to scan — all recent games were already scanned.'); S.scan = null; return; }
-      let added = 0;
-      for (let gi = 0; gi < games.length; gi++) {
-        const g = games[gi], c = new Chess();
-        if (!c.load_pgn(g.pgn, { sloppy: true })) continue;
-        const me = g.white.username.toLowerCase() === user ? 'w' : 'b';
-        const h = c.history({ verbose: true }), p = new Chess(c.header().FEN || undefined);
-        const name = `vs ${me === 'w' ? g.black.username : g.white.username}`;
-        for (let k = 0; k < h.length; k++) {
-          if (tok !== S.tok) return;
-          const fb = p.fen(); p.move(h[k].san);
-          if (h[k].color !== me || k < 6) continue;
-          say(`Game ${gi + 1}/${games.length} (${name}) · move ${Math.floor(k / 2) + 1}… ${added} mistakes found`);
-          const uci = h[k].from + h[k].to + (h[k].promotion || '');
-          const j = await judge(fb, uci, null, toolSearch, { depth: 9, movetime: 220 });
-          if (tok !== S.tok) return;
-          if (j && j.loss >= 15) { const before = (prog.bank || []).length; bankAdd({ fen: fb, best: j.best.pv[0], line: j.best.pv.slice(0, 8), played: h[k].san, loss: j.loss, src: 'chess.com', game: name }); if ((prog.bank || []).length > before) added++; }
-        }
-        (prog.bankScanned = prog.bankScanned || []).push(g.url); saveProgress();
-      }
-      S.scan = null; if (tok === S.tok) { list(); say(`Done — ${added} new mistake${added === 1 ? '' : 's'} added from ${games.length} games.`); }
+      const r = await scanChessCom($('bkUser').value, 5, m => { if (tok === S.tok) say(m); });
+      prog.mineScanAt = Date.now(); saveProgress();
+      S.scan = null; if (tok === S.tok) { list(); say(r.games ? `Done — ${r.added} new mistake${r.added === 1 ? '' : 's'} added from ${r.games} games.` : 'No new games to scan — all recent games were already scanned.'); }
     } catch (e) { S.scan = null; say(e instanceof TypeError ? 'Could not reach Chess.com (no internet?).' : e.message); }
+    MINE.busy = false;
   }
   function go() { S.items = shuffle(bankDue()).slice(0, 10); S.i = 0; S.ok = 0; if (!S.items.length) return list(); load(); }
   function load() {
@@ -468,9 +584,9 @@ function BankTool() {
   }
   function grade(right) {
     const x = S.cur;
-    if (right && S.tries === 0) { x.lvl++; x.due = Date.now() + (IVL[Math.min(x.lvl - 1, IVL.length - 1)] * DAY) - 3600e3; S.ok++; if (window.dailyBump) dailyBump('pz'); }
-    else { x.lvl = 0; x.due = Date.now() + DAY - 3600e3; }
-    x.reps++; saveProgress();
+    const ok = right && S.tries === 0;
+    if (ok) { S.ok++; if (window.dailyBump) dailyBump('pz'); }
+    bankGrade(x, ok);
   }
   async function move(from, to, promo) {
     if (S.view !== 'ex' || S.state !== 'play' || S.pos.turn() !== S.orient) return false;

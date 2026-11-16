@@ -66,6 +66,7 @@
       <div class="card status-card">
         <div class="status" id="status">Loading engine…</div>
         <div class="threat" id="threatLine" hidden></div>
+        <div class="evalsay" id="evalSay" hidden></div>
       </div>
       <div class="card post-game" id="postGame" hidden></div>
       <div class="card coach play-coach" id="playCoach" hidden></div>
@@ -112,10 +113,15 @@
           <label>Clock</label>
           <select id="tcSel">
             <option value="">No clock</option>
-            <option value="5+3">5 min + 3 s</option>
-            <option value="10+5">10 min + 5 s (rapid)</option>
-            <option value="15+10">15 min + 10 s</option>
+            <option value="5+0">5 min</option>
+            <option value="10+0">10 min</option>
+            <option value="5+3">5 min · +3 s bonus per move</option>
+            <option value="10+5">10 min · +5 s bonus per move</option>
+            <option value="15+10">15 min · +10 s bonus per move</option>
           </select>
+        </div>
+        <div class="opt">
+          <label class="coach-toggle"><input type="checkbox" id="plainOn"><span class="tg"></span><span><b>Plain English</b><small>Moves in words ("Bishop takes on d4") and the score in words ("You're winning") instead of chess notation and numbers.</small></span></label>
         </div>
         <div class="opt">
           <label class="coach-toggle"><input type="checkbox" id="humanOn"><span class="tg"></span><span><b>Human-like thinking</b><small>Stockfish takes its time like a real player — quick on obvious moves, longer when it's complicated. Off = instant moves.</small></span></label>
@@ -225,6 +231,7 @@
         <button class="btn" id="pzRetry">↻ Retry</button>
         <button class="btn primary" id="pzNext">Next puzzle ⏭</button>
       </div>
+      <div class="card mine-card" id="mineCard"></div>
       <div class="card">
         <div class="ana-h"><button class="btn wide" id="anaBtn">🔬 Analyze position</button></div>
         <div id="anaBody" hidden>
