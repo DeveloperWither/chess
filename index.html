@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0c11">
+<meta name="theme-color" content="#141517">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,7 +14,7 @@
 <title>Chess Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="walnut">
@@ -28,16 +28,17 @@
 <header class="top">
   <div class="brand">
     <span class="logo">♞</span>
-    <div><b>Chess Studio</b><small>STOCKFISH POWERED</small></div>
+    <div><b>Chess Studio</b></div>
   </div>
   <nav class="tabs" id="tabs">
-    <button data-mode="play" class="on">♟ Play</button>
-    <button data-mode="review">📊 Game Review</button>
-    <button data-mode="puzzle">🧩 Puzzles</button>
-    <button data-mode="opening">📖 Openings</button>
-    <button data-mode="vision">👁 Vision</button>
-    <button data-mode="endgame">♔ Endgames</button>
-    <button data-mode="online">🌐 Online</button>
+    <button data-mode="play" class="on">Play</button>
+    <button data-mode="train">Train</button>
+    <button data-mode="review">Review</button>
+    <button data-mode="puzzle">Puzzles</button>
+    <button data-mode="opening">Openings</button>
+    <button data-mode="vision">Vision</button>
+    <button data-mode="endgame">Endgames</button>
+    <button data-mode="online">Online</button>
   </nav>
   <div class="tools">
     <div class="swatches" id="swatches"></div>
@@ -62,36 +63,18 @@
   <aside class="panel">
     <!-- ================= PLAY ================= -->
     <div class="view" id="playView">
-      <div class="card">
+      <div class="card status-card">
         <div class="status" id="status">Loading engine…</div>
-        <div class="field">
-          <label>PLAY AS</label>
-          <div class="seg" id="sideSeg">
-            <button data-side="w" class="on">♔ White</button>
-            <button data-side="b">♚ Black</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>STOCKFISH STRENGTH</label>
-          <select id="level">
-            <option value="0">Beginner (~800)</option>
-            <option value="1">Casual (~1200)</option>
-            <option value="2">Club (~1600)</option>
-            <option value="3">Expert (~2000)</option>
-            <option value="4">Master (~2400)</option>
-            <option value="5" selected>Grandmaster (3s / move)</option>
-            <option value="6">Maximum (8s / move)</option>
-          </select>
-        </div>
-        <div class="btn-grid">
-          <button class="btn primary" id="newBtn">✚ New game</button>
-          <button class="btn" id="undoBtn">↶ Undo</button>
-          <button class="btn" id="hintBtn">💡 Hint</button>
-          <button class="btn" id="flipBtn">⇅ Flip board</button>
-        </div>
-        <label class="coach-toggle"><input type="checkbox" id="coachOn"><span class="tg"></span> 🎓 Live coach — judge &amp; explain every move I play</label>
+        <div class="threat" id="threatLine" hidden></div>
       </div>
+      <div class="card post-game" id="postGame" hidden></div>
       <div class="card coach play-coach" id="playCoach" hidden></div>
+      <div class="quick">
+        <button class="btn" id="hintBtn"><span class="ic">💡</span>Hint</button>
+        <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
+        <button class="btn" id="flipBtn"><span class="ic">⇅</span>Flip</button>
+        <button class="btn primary" id="newBtn"><span class="ic">+</span>New</button>
+      </div>
       <div class="card">
         <div class="card-h">Moves</div>
         <div class="moves" id="moves"></div>
@@ -103,7 +86,62 @@
         </div>
         <div class="info" id="info"></div>
       </div>
-      <button class="btn accent wide" id="reviewThisBtn">📊 Review this game</button>
+      <div class="card settings">
+        <div class="card-h">Game settings</div>
+        <div class="field">
+          <label>Play as</label>
+          <div class="seg" id="sideSeg">
+            <button data-side="w" class="on">White</button>
+            <button data-side="b">Black</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Stockfish strength</label>
+          <select id="level">
+            <option value="0">Beginner (~800)</option>
+            <option value="1">Casual (~1200)</option>
+            <option value="2">Club (~1600)</option>
+            <option value="3">Expert (~2000)</option>
+            <option value="4">Master (~2400)</option>
+            <option value="5" selected>Grandmaster (3s / move)</option>
+            <option value="6">Maximum (8s / move)</option>
+            <option value="7">🪜 Ladder — climb to 1000</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Clock</label>
+          <select id="tcSel">
+            <option value="">No clock</option>
+            <option value="5+3">5 min + 3 s</option>
+            <option value="10+5">10 min + 5 s (rapid)</option>
+            <option value="15+10">15 min + 10 s</option>
+          </select>
+        </div>
+        <div class="opt">
+          <label class="coach-toggle"><input type="checkbox" id="humanOn"><span class="tg"></span><span><b>Human-like thinking</b><small>Stockfish takes its time like a real player — quick on obvious moves, longer when it's complicated. Off = instant moves.</small></span></label>
+          <div class="seg seg-sm" id="humanSeg">
+            <button data-s="2">Quick ~2s</button>
+            <button data-s="5">Normal ~5s</button>
+            <button data-s="10">Slow ~10s</button>
+          </div>
+        </div>
+        <div class="opt">
+          <label class="coach-toggle"><input type="checkbox" id="coachOn"><span class="tg"></span><span><b>Live coach</b><small>Grades every move you play and explains why.</small></span></label>
+        </div>
+        <div class="opt">
+          <div class="card-h">Training wheels</div>
+          <label class="coach-toggle"><input type="checkbox" id="tgGuard"><span class="tg"></span><span><b>Blunder guard</b><small>If your move is a mistake, Stockfish waits and the coach lets you try again before it's punished.</small></span></label>
+          <label class="coach-toggle"><input type="checkbox" id="tgThreat"><span class="tg"></span><span><b>Threat alerts</b><small>After Stockfish moves, a red arrow shows what it's threatening.</small></span></label>
+          <label class="coach-toggle"><input type="checkbox" id="tgRadar"><span class="tg"></span><span><b>Loose-piece radar</b><small>Outlines your pieces nobody defends (yellow) and pieces in danger (red).</small></span></label>
+        </div>
+      </div>
+      <button class="btn wide" id="reviewThisBtn">Review this game</button>
+    </div>
+
+    <!-- ================= TRAIN ================= -->
+    <div class="view" id="trainView" hidden>
+      <div class="card tr-main" id="trMain"></div>
+      <div class="view" id="trList"></div>
     </div>
 
     <!-- ================= REVIEW ================= -->
@@ -324,6 +362,8 @@
 <script src="app.js"></script>
 <script src="vision.js"></script>
 <script src="endgames.js"></script>
+<script src="train.js"></script>
+<script src="tools.js"></script>
 <script src="firebase-config.js"></script>
 <script src="online.js"></script>
 </body>

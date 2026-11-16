@@ -581,4 +581,610 @@ const OPENINGS = [
       },
     ],
   },
+  {
+    id: 'italian', name: 'Italian Game', side: 'w', icon: '♗',
+    blurb: 'You are White: 1.e4 e5 2.Nf3 Nc6 3.Bc4. Fast development, a bishop aimed at f7, and lots of traps for the opponent. Start with 📚 Basics.',
+    lessons: [
+      {
+        id: 'it-l1', title: '1. The Italian idea', steps: [
+          { moves: '', task: 'e4',
+            text: 'Three rules win most beginner openings: <b>1)</b> take the centre with a pawn, <b>2)</b> develop knights and bishops quickly, <b>3)</b> castle early. Start with 1.e4.' },
+          { moves: 'e4 e5', task: 'Nf3', arrows: ['g1f3'],
+            text: 'Black mirrors you with 1…e5. Develop a knight AND attack the e5 pawn at the same time: 2.Nf3.',
+            done: 'Every good opening move does two jobs. Nf3 develops and makes Black defend e5.' },
+          { moves: 'e4 e5 Nf3 Nc6', task: 'Bc4', arrows: ['f1c4'], marks: ['f7'],
+            text: 'Black defends e5 with the knight. Now put your bishop on its best diagonal: 3.Bc4 — the Italian Game.',
+            done: 'The bishop points straight at <b>f7</b>. Before castling, f7 is Black\'s weakest square: only the king defends it. Many quick wins happen on f7.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Bc5', arrows: ['e1g1', 'c2c3', 'd2d4'], marks: ['f7', 'f2'],
+            text: 'Your next jobs: castle (O-O) so your king is safe and your rook joins, then play c3 and d4 (or the quieter d3) to fight for the centre.<br><br>Black has the same ideas: Black\'s bishop on c5 aims at <b>your</b> f2. So don\'t leave your king in the middle, and don\'t bring your queen out early just to chase pawns.' },
+        ],
+      },
+      {
+        id: 'it-l2', title: '2. The plan: c3, then d3 or d4', steps: [
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Bc5', task: 'c3', arrows: ['c2c3'], marks: ['d4'],
+            text: 'Black copied you with 3…Bc5 (the Giuoco Piano). You want a pawn on d4, but d4 is covered by Black\'s bishop and e5 pawn. Prepare it: 4.c3!',
+            done: 'Now if you play d4 and Black takes, you recapture with the c-pawn and keep TWO pawns in the centre.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6', task: 'd3', arrows: ['!f6e4'],
+            text: 'Black attacks your e4 pawn. The calm way (the "Giuoco Pianissimo", the very quiet game) is to defend it with a pawn: 5.d3.',
+            done: 'e4 is safe, your dark bishop can come out, and you can castle next move. Slow but very solid — and the top players use it too.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O', arrows: ['f1e1', 'c4b3', 'h2h3', 'b1d2'],
+            text: '<b>Middlegame plan after d3:</b> Re1 (supports e4), Bb3 (keeps the bishop safe from …Na5 or …d5 attacks), h3 (stops …Bg4 pinning your knight), then Nbd2-f1-g3 bringing the knight toward Black\'s king. When everything is ready, push d3-d4.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d4 exd4 cxd4 Bb4+ Bd2 Bxd2+ Nbxd2 d5', marks: ['d4'],
+            text: 'The sharper way is 5.d4 at once. After trades you often get an <b>isolated d4 pawn</b> (no pawns beside it). It gives your pieces lots of space and attacking chances — but if all the pieces get traded it can become weak. With an isolated pawn: attack, don\'t trade.' },
+        ],
+      },
+      {
+        id: 'it-l3', title: '3. Two Knights & the Fried Liver', steps: [
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nf6', task: 'Ng5', arrows: ['f3g5', 'c4f7'], marks: ['f7'],
+            text: 'Black plays 3…Nf6 (the Two Knights) and attacks e4. The safe answer is 4.d3. The wild answer is 4.Ng5!? — the knight AND the bishop now attack f7. Try it: play 4.Ng5.',
+            done: 'f7 is attacked twice and defended only once (by the king). Black has to block with …d5.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5', task: 'exd5', arrows: ['e4d5'],
+            text: 'Black blocks the bishop\'s line to f7 with 4…d5. Take the pawn: 5.exd5.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Nxd5', task: 'Nxf7', arrows: ['g5f7'], marks: ['d5', 'e8'],
+            text: 'Black took back with the knight — the most common beginner mistake here! Now comes the <b>Fried Liver Attack</b>: sacrifice your knight on f7 to drag the king out. Play 6.Nxf7!',
+            done: 'The knight attacks the queen and the rook. Black more or less has to take it with the king.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Nxd5 Nxf7 Kxf7', task: 'Qf3+', arrows: ['d1f3'], marks: ['d5'],
+            text: 'The king took. Now check it AND hit the d5 knight twice: 7.Qf3+!',
+            done: 'The king has to go to e6 to keep protecting the knight on d5 (it is pinned to the king by your bishop). Next Nc3 piles on d5 — Black\'s king is stuck in the middle of the board. Stockfish rates this about +1.5 for you.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Na5', task: 'Bb5+', arrows: ['!a5c4'],
+            text: 'Strong players don\'t take with the knight — they play 5…Na5!, attacking your bishop. Play 6.Bb5+ (check, and the bishop is safe).',
+            done: 'You will be a pawn up, but Black gets fast development for it. That is why 4.Ng5 is a gamble: great against beginners, but Stockfish says the quiet 4.d3 is the safer choice.' },
+        ],
+      },
+      {
+        id: 'it-l4', title: '4. Traps: set them, don\'t fall in', steps: [
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nd4', marks: ['e5', 'd4'], arrows: ['!f3e5', '!d8g5'],
+            text: '<b>The Blackburne Shilling trap.</b> Black\'s 3…Nd4 looks like a mistake — e5 seems free. But 4.Nxe5?? Qg5! attacks your knight AND g2, and after 5.Nxf7?? Qxg2 6.Rf1 Qxe4+ 7.Be2 Nf3# is checkmate. Lesson: when a piece is offered for free, ask WHY.' },
+          { moves: 'e4 e5 Nf3 Nc6 Bc4 Nd4', task: 'Nxd4', arrows: ['f3d4'],
+            text: 'The right answer: trade the annoying knight. Play 4.Nxd4.',
+            done: 'After 4…exd4 5.O-O you are ahead in development and Black\'s pawn on d4 is in the way. Black wasted time with the knight.' },
+          { moves: 'e4 e5 Nf3 d6 Bc4 Bg4 h3 Bh5 Nc3 Nc6', task: 'Nxe5', arrows: ['f3e5'], marks: ['h5', 'f7'],
+            text: '<b>The Légal Trap.</b> Black pinned your knight to your queen and then made a slow move. The pin is not real! Play 6.Nxe5!',
+            done: 'If Black grabs your queen with 6…Bxd1??, then 7.Bxf7+ Ke7 8.Nd5# is checkmate with three minor pieces. If 6…Nxe5 7.Qxh5 — you win a pawn anyway.' },
+          { moves: 'e4 e5 Nf3 d6 Bc4 Bg4 h3 Bh5 Nc3 Nc6 Nxe5 Bxd1 Bxf7+ Ke7', task: 'Nd5#', arrows: ['c3d5'],
+            text: 'Black took the queen and got a lot of trouble. Finish it: 8.Nd5 is checkmate!',
+            done: 'Checkmate — with a queen down! Remember the pattern: bishop on f7, knights on e5 and d5.' },
+          { moves: 'e4 e5 Nf3 Nf6 Nxe5 Nxe4 Qe2 Nf6', task: 'Nc6+', arrows: ['e5c6', '!e2e8'],
+            text: '<b>Petrov trap.</b> Black copied you with 3…Nxe4 and after 4.Qe2 retreated 4…Nf6?? — but the e-file is open. Move your knight with a DISCOVERED CHECK that also attacks the queen: 5.Nc6+!',
+            done: 'Black has to deal with the check from your queen, and next you take the queen on d8. Copying moves is dangerous!' },
+        ],
+      },
+    ],
+    groups: [
+      {
+        name: 'Giuoco Piano (3…Bc5)',
+        plan: 'Castle, Re1, Bb3 and h3, then bring the b1 knight round to g3 (Nbd2-f1-g3). Push d3-d4 when your pieces are ready. Keep the bishop on the a2-g8 diagonal aimed at f7. Don\'t start attacking before you have castled.',
+        lines: [
+          { id: 'it-gp-d3', name: '5.d3 — the quiet main line', pgn: `
+            e4 {Take the centre and open lines for your queen and bishop.}
+            e5 {Black stakes an equal claim in the centre.}
+            Nf3 {Develop AND attack e5.}
+            Nc6 {The natural defence: develop a knight and protect e5.}
+            Bc4 {The Italian Game. The bishop aims at f7, the weakest point in Black's camp (only the king guards it).}
+            Bc5 {The Giuoco Piano ("quiet game"): Black copies you and aims at YOUR f2.}
+            [Nxe5: e5 is protected by the c6 knight. After 4…Nxe5 you are just a piece down — and the "fork trick" 5.d4 fails to 5…Bxd4.]
+            c3 {Prepare d4: if Black ever takes on d4, you recapture with this pawn and keep a big centre.}
+            Nf6 {Develop and attack your e4 pawn.}
+            d3 {Defend e4 with a pawn. This is the Giuoco Pianissimo — the "very quiet game". Solid, safe and full of hidden ideas.}
+            d6 {Black also supports the centre.}
+            O-O {Castle: your king is safe and the rook comes toward the centre.}
+            O-O
+            Re1 {The rook supports e4 and gets ready for a later d4 that opens the centre.}
+            a6 {Black makes a hole for the bishop on a7, so it can't be chased by b4 or d4.}
+            Bb3 {Same idea: step back before Black's …Na5 or …d5 can hit the bishop. It still aims at f7.}
+            Ba7
+            h3 {Stop …Bg4 pinning your knight to your queen. Now the knight on f3 is free to move.}
+            Re8 {Black copies you.}
+            Nbd2 {Next Nf1 and Ng3 — the knight heads for the kingside, where Black's king lives.}` },
+          { id: 'it-gp-d3-o-o', name: '5.d3 O-O 6.O-O d5', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3
+            O-O {Black castles first.}
+            O-O
+            d5 {Black strikes in the centre and attacks your bishop.}
+            exd5 {Take: the d5 pawn is attacking c4 and e4, so remove it.}
+            Nxd5
+            Re1 {Hit e5! It is now protected only by the c6 knight, and your rook is on the open e-file. Next Nbd2-e4 or b4.}` },
+          { id: 'it-gp-d4', name: '5.d4 — the sharp centre', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6
+            d4 {The sharper way: build the centre right now. (5.d3 is the quieter choice.)}
+            exd4 {Black takes — it has to, or you push d5/dxe5.}
+            cxd4 {Recapture with the pawn: two pawns in the centre.}
+            Bb4+ {Black's bishop has to leave c5 anyway, so it checks on the way.}
+            Bd2 {Block with a piece and offer a trade.}
+            Bxd2+
+            Nbxd2 {Take back with the b1 knight — it develops and protects e4.}
+            d5 {Black breaks your centre before you can play e5.}
+            exd5 {Take. Your d4 pawn is now isolated — but your pieces get open lines.}
+            Nxd5
+            Qb3 {Hit the d5 knight and the b7 pawn at the same time.}
+            Nce7 {The knight protects d5 from e7.}
+            O-O {Castle. Plan: Rfe1 and Rac1, use the open files, and keep pieces on the board — the isolated pawn is strong while there are pieces to attack with.}` },
+          { id: 'it-gp-d6', name: '4…d6 — take the centre', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Bc5 c3
+            d6 {Black supports e5 but blocks the bishop's retreat path a bit.}
+            d4 {Now d4 comes with no danger: take the whole centre.}
+            exd4
+            cxd4
+            Bb6 {The bishop steps back but stays on the diagonal.}
+            Nc3 {Develop and protect e4.}
+            Nf6
+            h3 {Stop …Bg4. Next O-O, Re1 — you have the big centre and easy development.}` },
+        ],
+      },
+      {
+        name: 'Two Knights (3…Nf6)',
+        plan: 'In the quiet 4.d3 lines: O-O, Re1, c3, Bb3, h3 and Nbd2-f1-g3, just like the Giuoco Piano. In the wild 4.Ng5 lines: if you won material, finish developing before attacking; if Black has a pawn for nothing, keep pieces coordinated and look at Black\'s king.',
+        lines: [
+          { id: 'it-tk-d3', name: '4.d3 — the safe line', pgn: `
+            e4 e5 Nf3 Nc6 Bc4
+            Nf6 {The Two Knights Defence: Black attacks e4 instead of copying with …Bc5.}
+            d3 {The calm answer: defend e4 with a pawn and keep everything safe. (4.Ng5 is the wild option — see the other lines.)}
+            Be7 {A quiet set-up for Black.}
+            O-O
+            O-O
+            Re1 {Support e4. You have more central control.}
+            d6
+            c3 {Prepare d4 and give your bishop a retreat square on c2. Then Bb3, h3, Nbd2-f1-g3.}` },
+          { id: 'it-tk-d3-bc5', name: '4.d3 Bc5 — same as the Giuoco', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Nf6 d3
+            Bc5 {The bishop goes to c5 after all.}
+            c3 {This is exactly the Giuoco Pianissimo position from 3…Bc5 4.c3 Nf6 5.d3 — a transposition. Same plan!}
+            d6 O-O O-O Re1 a6 Bb3 Ba7 h3` },
+          { id: 'it-tk-ng5', name: '4.Ng5 d5 5.exd5 Na5 — main line', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Nf6
+            Ng5 {The aggressive try: knight and bishop both hit f7.}
+            d5 {The only good defence: block the bishop.}
+            exd5 {Take, and now d5 is attacked again.}
+            Na5 {Black's best: attack your bishop instead of taking back.}
+            [d3: Possible, but 6.Bb5+ is the main move — it gains time with check.]
+            Bb5+ {Check, and the bishop gets out of danger.}
+            c6 {Black blocks and attacks your d5 pawn.}
+            dxc6 {Take: you'll be a pawn up.}
+            bxc6
+            Be2 {Retreat. The bishop stays safe and guards your kingside.}
+            h6 {Black kicks your g5 knight.}
+            Nf3 {Back home.}
+            e4 {Black kicks it again — this is Black's compensation for the pawn: fast development and space.}
+            Ne5 {The knight finds a great central square.}
+            Bd6 {Black develops with an eye on e5.}
+            d4 {Support the knight and open lines for your c1 bishop.}
+            exd3 {Black takes "en passant"! (A pawn that just moved two squares can be taken as if it moved one.)}
+            Nxd3 {Recapture. You are a pawn up — now castle, play b3 and Bb2 and keep everything protected.}` },
+          { id: 'it-tk-fried', name: '5…Nxd5? Fried Liver Attack', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5
+            Nxd5 {A natural mistake! The knight on d5 is now a target.}
+            Nxf7 {The Fried Liver! Sacrifice the knight to pull Black's king into the open. It attacks the queen and rook too.}
+            Kxf7
+            Qf3+ {Check — and the d5 knight is attacked twice (queen and bishop). It is pinned to the king.}
+            Ke6 {The king must stay close to defend d5. Any other move loses the knight.}
+            Nc3 {Pile up on the pinned knight: three attackers on d5.}
+            Nb4 {Black defends d5 with another knight and threatens …Nxc2+.}
+            Qe4 {Protect c2 (so …Nxc2+ can be answered by Qxc2) and keep the king boxed in. Black's king is stuck on e6.}
+            c6
+            a3 {Kick the b4 knight away. When the defenders of d5 go, d5 falls and Black's king has no shelter. Next d4 opens even more lines.}` },
+          { id: 'it-tk-fried-kg8', name: 'Fried Liver: 7…Kg8?? mate', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Nxd5 Nxf7 Kxf7 Qf3+
+            Kg8 {This hides the king — but it leaves d5 defended only by the queen.}
+            Bxd5+ {Check with the bishop!}
+            Qxd5
+            Qxd5+ {Check again — the queen comes in.}
+            Be6
+            Qxe6# {Checkmate! The bishop on f8 blocks the king's only escape square.}` },
+          { id: 'it-tk-traxler', name: '4.Ng5 Bc5!? Traxler', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5
+            Bc5 {The Traxler: Black ignores f7 and counter-attacks f2. Very tricky, but Stockfish says it is a mistake — f7 really falls.}
+            Bxf7+ {Take with the bishop and check — the simple, safe way. (Nxf7 wins more in theory, but after …Bxf2+! the position gets crazy.)}
+            Ke7 {The king can't take: Bxf7+ comes with check and the g5 knight guards f7.}
+            Bb3 {Retreat to safety. You are a pawn up and Black's king has lost the right to castle. Next O-O, d3, Nc3.}` },
+        ],
+      },
+      {
+        name: 'Hungarian & Blackburne Shilling',
+        plan: 'Black played passively (3…Be7) or wasted time (3…Nd4). Grab the centre with d4, develop fast, castle, and use your lead. Don\'t grab pawns that are offered for free without checking why.',
+        lines: [
+          { id: 'it-hu-exd4', name: '3…Be7 Hungarian 4.d4 exd4', pgn: `
+            e4 e5 Nf3 Nc6 Bc4
+            Be7 {The Hungarian: very solid, but passive — the bishop doesn't attack anything from e7.}
+            d4 {Black didn't fight for d4, so take it now.}
+            exd4
+            Nxd4 {Recapture with the knight: a strong piece in the centre.}
+            Nf6
+            Nc3 {Develop and protect e4.}
+            O-O
+            O-O {Castle. You have more space and freer pieces. Plan: Re1, Bf4 or Be3, Qd2.}` },
+          { id: 'it-hu-d6', name: '3…Be7 4.d4 d6', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Be7 d4
+            d6 {Black holds e5 with a pawn.}
+            d5 {Gain space with tempo: the c6 knight is attacked.}
+            Nb8 {The knight has to go back home. Black has lost time.}
+            Bd3 {Keep the bishop safe and protect e4. Next c4, Nc3, O-O — a big space advantage.}` },
+          { id: 'it-bs', name: '3…Nd4?! Blackburne Shilling', pgn: `
+            e4 e5 Nf3 Nc6 Bc4
+            Nd4 {A trap! It looks like it just gives away e5. Objectively it wastes time — IF you don't fall for it.}
+            [Nxe5: The Blackburne Shilling trap: 4…Qg5! attacks your knight and g2. If 5.Nxf7?? Qxg2 6.Rf1 Qxe4+ 7.Be2 Nf3# is checkmate.]
+            Nxd4 {Trade the annoying knight. Simple and strong.}
+            exd4
+            O-O {Castle. Black's d4 pawn blocks Black's own pieces.}
+            Nf6
+            Re1 {The rook hits e-file and protects e4. You're ahead in development; next c3 or d3 and Bb3.}` },
+        ],
+      },
+      {
+        name: 'Black avoids 2…Nc6',
+        plan: 'Black played a less common second move. Keep following the rules: centre, develop, castle. Watch for tactics on f7 and on the e-file — they are often the quickest way to an advantage.',
+        lines: [
+          { id: 'it-ph-nf6', name: '2…d6 Philidor 3.Bc4 Nf6', pgn: `
+            e4 e5 Nf3
+            d6 {The Philidor: solid, but it blocks Black's f8 bishop.}
+            Bc4 {Same Italian idea: aim at f7.}
+            Nf6
+            Nc3 {Develop and defend e4.}
+            Be7
+            d4 {Now take the centre.}
+            exd4
+            Nxd4
+            O-O
+            O-O {Castle. You have more space; plan Re1, Bf4, Qd2 or f4.}` },
+          { id: 'it-ph-bg4', name: '2…d6 3.Bc4 Bg4 4.h3 Bxf3', pgn: `
+            e4 e5 Nf3 d6 Bc4
+            Bg4 {Pins your knight to your queen.}
+            h3 {Ask the bishop at once.}
+            Bxf3
+            Qxf3 {Recapture with the queen: now queen AND bishop look at f7!}
+            Qd7 {The only good way to stop the threats. (5…Nf6? 6.Qb3! attacks f7 and b7 at once.)}
+            d3 {Protect e4 calmly.}
+            Nf6
+            O-O {Castle. You have the two bishops — open the position (c3, d4) to make them strong.}` },
+          { id: 'it-legal', name: 'Légal Trap 4…Bh5 5.Nc3 Nc6?', pgn: `
+            e4 e5 Nf3 d6 Bc4 Bg4 h3
+            Bh5 {Black keeps the pin.}
+            Nc3 {Develop. Now the trap is set.}
+            Nc6 {Looks natural, but it allows a famous trick.}
+            Nxe5 {The Légal Trap! Ignore the "pin" — if Black takes your queen, it is mate.}
+            Bxd1 {Greedy!}
+            [Kxd1: Don't take back! You have a checkmate: Bxf7+ and Nd5#.]
+            Bxf7+ {Check! The king has only one square.}
+            Ke7
+            Nd5# {Checkmate with three minor pieces against a queen up.}` },
+          { id: 'it-legal-nxe5', name: 'Légal Trap: Black takes the knight', pgn: `
+            e4 e5 Nf3 d6 Bc4 Bg4 h3 Bh5 Nc3 Nc6 Nxe5
+            Nxe5 {Black's best: take the knight instead of the queen.}
+            Qxh5 {Your queen takes the bishop — it was unprotected.}
+            Nxc4 {Black takes your bishop.}
+            Qb5+ {Check and fork: the king and the c4 knight are both attacked.}
+            c6
+            Qxc4 {You have won a pawn and Black's king can't castle easily. Next d3, O-O.}` },
+          { id: 'it-petrov', name: '2…Nf6 Petrov', pgn: `
+            e4 e5 Nf3
+            Nf6 {The Petrov: Black counter-attacks your e4 pawn.}
+            Nxe5 {Take first — e5 is undefended.}
+            d6 {Correct: kick the knight before taking e4.}
+            [Nxf7: The Cochrane Gambit — a piece for two pawns. Fun, but Stockfish says it is unsound. Retreat the knight.]
+            Nf3 {Back to safety.}
+            Nxe4 {Now Black takes your pawn.}
+            d4 {Take the centre. Black's knight on e4 will be chased by Bd3, O-O, Re1, c4.}
+            d5
+            Bd3 {Develop with an attack on e4. Next O-O, Re1 and c4.}` },
+          { id: 'it-petrov-trap', name: 'Petrov: 3…Nxe4? 4.Qe2', pgn: `
+            e4 e5 Nf3 Nf6 Nxe5
+            Nxe4 {Copying is a mistake here.}
+            Qe2 {Attack the e4 knight and pin… the e-file now points at Black's king!}
+            Nf6 {Blunder: the knight leaves and the e-file is open.}
+            Nc6+ {Discovered check from your queen — and the knight attacks the queen on d8!}
+            Be7
+            Nxd8 {You win the queen.}` },
+          { id: 'it-petrov-qe7', name: 'Petrov: 3…Nxe4? 4.Qe2 Qe7', pgn: `
+            e4 e5 Nf3 Nf6 Nxe5 Nxe4 Qe2
+            Qe7 {Black's best: block the e-file with the queen.}
+            Qxe4 {Take the knight.}
+            d6 {Black attacks your knight on e5 and pins it — your queen is behind it.}
+            d4 {Protect the knight with a pawn. You have won a pawn and you're ahead in development.}` },
+        ],
+      },
+      {
+        name: 'Punish early queen moves',
+        plan: 'Black\'s queen came out too early. Develop with tempo (attack the queen while bringing out pieces), take the centre and castle. Every time Black moves the queen again, you gain more time.',
+        lines: [
+          { id: 'it-qf6', name: '4…Qf6?! — kick the queen', pgn: `
+            e4 e5 Nf3 Nc6 Bc4 Bc5 c3
+            Qf6 {The queen protects e5 and eyes f2 — but it stands on a square your pawns can attack.}
+            d4 {Open the centre while Black's queen is misplaced.}
+            exd4
+            e5 {Push with tempo — the queen is attacked!}
+            Qg6 {The queen runs.}
+            cxd4 {Now both your centre pawns are strong and the c5 bishop is attacked.}
+            Bb4+
+            Nc3 {Block and develop. You are clearly better: big centre, and Black's queen is still in the way.}` },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'caro', name: 'Caro-Kann Defense', side: 'b', icon: '♝',
+    blurb: 'You are Black and answer 1.e4 with 1…c6, then 2…d5. Rock-solid, and unlike the French your light bishop gets OUT before you play …e6. Start with 📚 Basics.',
+    lessons: [
+      {
+        id: 'ck-l1', title: '1. What is the Caro-Kann?', steps: [
+          { moves: 'e4', task: 'c6', arrows: ['c7c6'],
+            text: 'White opens 1.e4. The Caro-Kann answer looks very modest: 1…c6. Play it.',
+            done: 'It prepares …d5 — and when White\'s e4 pawn takes on d5, you can recapture with this c-pawn and keep a pawn in the centre.' },
+          { moves: 'e4 c6 d4', task: 'd5', arrows: ['d7d5'],
+            text: 'White takes the centre with 2.d4. Now strike: 2…d5, attacking e4.',
+            done: 'Your d5 pawn is protected by c6. White has to decide what to do with the e4 pawn.' },
+          { moves: 'e4 c6 d4 d5', marks: ['e4', 'd5'], arrows: ['!d5e4'],
+            text: 'White has three main answers, and you\'ll learn each:<br>• <b>3.e5</b> push — the Advance: you play 3…Bf5!<br>• <b>3.Nc3</b> (or Nd2) defend — the Classical: you take 3…dxe4 and play …Bf5 with tempo<br>• <b>3.exd5</b> trade — the Exchange / Panov: you recapture …cxd5.' },
+        ],
+      },
+      {
+        id: 'ck-l2', title: '2. Bishop out BEFORE …e6', steps: [
+          { moves: 'e4 c6 d4 d5 e5', task: 'Bf5', arrows: ['c8f5'], marks: ['e6'],
+            text: 'White pushed past with 3.e5. Here is the big Caro-Kann idea: your light-squared bishop comes out <b>first</b>. Play 3…Bf5.',
+            done: 'In the French you play …e6 early and that bishop is stuck behind it for the whole game. In the Caro-Kann it gets out first, and then …e6 builds a wall behind it.' },
+          { moves: 'e4 c6 d4 d5 e5 Bf5 Nf3', task: 'e6', arrows: ['e7e6'],
+            text: 'Now close the wall: 4…e6. It frees your f8 bishop and supports d5.',
+            done: 'Your pawns on c6, d5 and e6 are solid, and your bishop is OUTSIDE the chain. Your pieces will go: knights to d7 and e7, dark bishop to e7, castle kingside.' },
+          { moves: 'e4 c6 d4 d5 e5 Bf5 Nf3 e6 Be2 Nd7 O-O Ne7', arrows: ['c7c5', 'h7h6', 'e7g6'], marks: ['d4'],
+            text: '<b>Your plan:</b> hit the base of White\'s pawn chain (d4) with …c5 — yes, the c-pawn moves twice, but now it does more. Play …h6 so your bishop always has h7 to hide on. Knights go to g6/f5 and c6 to attack d4 and e5.' },
+        ],
+      },
+      {
+        id: 'ck-l3', title: '3. The Classical: develop with tempo', steps: [
+          { moves: 'e4 c6 d4 d5 Nc3', task: 'dxe4', arrows: ['d5e4'],
+            text: 'White defends e4 with the knight. Just take it: 3…dxe4.',
+            done: 'The knight takes back on e4 — and that gives your bishop a target.' },
+          { moves: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4', task: 'Bf5', arrows: ['c8f5'],
+            text: 'Develop the bishop AND attack the knight: 4…Bf5.',
+            done: 'That\'s "development with tempo": you bring out a piece and White has to spend a move on the knight.' },
+          { moves: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3', task: 'Bg6', arrows: ['f5g6'],
+            text: 'The knight hits your bishop. Step back to g6, where it still controls the b1-h7 diagonal.' },
+          { moves: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6 h4', task: 'h6', arrows: ['!h4h5', 'h7h6'], marks: ['g6', 'h7'],
+            text: 'Danger! White threatens h5, and your bishop would be TRAPPED: h7 is blocked by your own pawn and f5 is covered by the g3 knight. Make an escape square: 6…h6.',
+            done: 'Now if h5, the bishop drops back to h7. This is a key Caro-Kann pattern: always keep an escape square for that bishop.' },
+        ],
+      },
+      {
+        id: 'ck-l4', title: '4. Traps to avoid', steps: [
+          { moves: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Nd7 Qe2', marks: ['d6', 'e7'], arrows: ['!e4d6'],
+            text: '<b>The famous smothered mate.</b> If Black plays 4…Nd7 (instead of our 4…Bf5) and White answers 5.Qe2, the natural 5…Ngf6?? loses at once: 6.Nd6 is checkmate! The e7 pawn can\'t take (it is pinned by the queen) and the king is surrounded by its own pieces. One more reason we play 4…Bf5.' },
+          { moves: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Nd7 Qe2 Ngf6 Nd6#', marks: ['d6', 'e8'],
+            text: 'This is the final position. Checkmate on move 6 — it has happened in grandmaster games!' },
+          { moves: 'e4 c6 d4 d5 e5 Bf5 g4', task: 'Be4', arrows: ['f5e4', '!g4f5'],
+            text: 'Against the Advance, White sometimes storms with 4.g4, chasing your bishop. Don\'t panic: go to e4 — it\'s protected by your d5 pawn. Play 4…Be4.',
+            done: 'White usually plays f3 to kick it again, which weakens White\'s own king. Your bishop then goes to g6.' },
+          { moves: 'e4 c6 d4 d5 e5 Bf5 g4 Be4 f3 Bg6 h4', task: 'h5', arrows: ['!h4h5', 'h7h5'],
+            text: 'Now White threatens h5 to trap your bishop. Stop it with 6…h5!',
+            done: 'The bishop is safe, and White\'s pawns have left big holes around White\'s king.' },
+          { moves: 'e4 c6 d4 d5 exd5 cxd5 Bd3 Nc6 c3 Nf6 Bf4 Bg4 Qb3', task: 'Na5', arrows: ['!b3b7', 'c6a5'], marks: ['b7'],
+            text: 'In the Exchange Variation White\'s queen hits b7 (your bishop left c8, so b7 is undefended). Counter-attack: 7…Na5!',
+            done: 'The queen has to move, and after 8.Qa4+ Bd7 9.Qc2 b7 is safe and your knight can come back to c6.' },
+        ],
+      },
+    ],
+    groups: [
+      {
+        name: 'Advance Variation (3.e5)',
+        plan: 'Hit the base of White\'s chain with …c5, put knights on c6 and f5/g6 to attack d4, keep …h6 so the bishop has h7. Castle kingside when White\'s pieces are not aimed there. If White trades on c5, take back with the bishop.',
+        lines: [
+          { id: 'ck-adv-nf3', name: '4.Nf3 e6 5.Be2 — Short system', pgn: `
+            e4 {White takes the centre.}
+            c6 {The Caro-Kann. You prepare …d5 so the pawn on d5 is protected.}
+            d4 {White builds the two-pawn centre.}
+            d5 {Hit e4.}
+            e5 {The Advance: White grabs space and takes f6 from your knight.}
+            [Nf6: The e5 pawn controls f6 — 4.exf6 just wins your knight. Against the Advance your g8 knight goes to e7 instead. First get the bishop out with …Bf5.]
+            Bf5 {The key move: the bishop gets out BEFORE you play …e6. (…e6 first would lock it in behind the pawn — exactly the French problem.)}
+            Nf3 {Calm development.}
+            e6 {Now build the wall. Your bishop is outside, your f8 bishop is free.}
+            Be2 {White prepares to castle.}
+            Nd7 {The knight goes to d7 (f6 is taken by the e5 pawn) and supports …c5 later.}
+            O-O
+            Ne7 {The other knight heads to g6 or f5 to attack d4 and e5.}
+            Nbd2
+            c5 {Hit the base of the chain. Now d4 is attacked by a pawn and White's centre must decide.}
+            dxc5
+            Nc6 {Your knights on c6 and d7 both attack e5 — you'll win back the c5 pawn or the e5 pawn.}
+            Nb3
+            Be7 {Develop and get ready to castle. Next …O-O and …Bxc5 or …Ndxe5. Equal and comfortable.}` },
+          { id: 'ck-adv-bd3', name: '4.Bd3 — trade bishops', pgn: `
+            e4 c6 d4 d5 e5 Bf5
+            Bd3 {White offers to trade your good bishop.}
+            Bxd3 {Take it: you're trading your "problem bishop" for White's good one.}
+            Qxd3
+            e6 {Build the wall.}
+            Nf3
+            c5 {Hit the base right away.}
+            c3 {White supports d4.}
+            Nc6 {Pressure on d4. Next …Qb6, …Nge7-f5 — same plan as the French Advance, but without the bad bishop!}` },
+          { id: 'ck-adv-nc3-be3', name: '4.Nc3 e6 5.g4 — 8.Be3', pgn: `
+            e4 c6 d4 d5 e5 Bf5
+            Nc3 {White prepares an aggressive pawn storm.}
+            e6
+            g4 {Chase the bishop!}
+            Bg6 {Step back but stay on the diagonal.}
+            Nge2 {White plans Nf4 and h4-h5 to trap the bishop.}
+            c5 {Counter-attack in the centre! When White attacks on the wing, hit back in the middle.}
+            h4 {Threatening h5 to trap the bishop.}
+            h6 {Make the escape square h7 — now h5 is answered by …Bh7.}
+            Be3
+            Ne7 {Heading to c6 to pile up on d4. Black is fine: White's pawns on g4 and h4 can become weak.}` },
+          { id: 'ck-adv-nc3-h5', name: '4.Nc3 e6 5.g4 — 8.h5', pgn: `
+            e4 c6 d4 d5 e5 Bf5 Nc3 e6 g4 Bg6 Nge2 c5 h4 h6
+            h5 {White chases the bishop again.}
+            Bh7 {Thanks to …h6 the bishop has a home.}
+            f4 {White grabs more space.}
+            Ne7 {Knight to c6 and keep hitting d4. White's pawns have run far forward — the squares behind them are weak.}` },
+          { id: 'ck-adv-g4', name: '4.g4 Be4 — the pawn storm', pgn: `
+            e4 c6 d4 d5 e5 Bf5
+            g4 {White chases the bishop right away.}
+            Be4 {Protected by d5. White has to spend another pawn move.}
+            f3 {Kick it again — but this weakens White's king.}
+            Bg6
+            h4 {Threatening h5 to trap the bishop.}
+            h5 {Stop it! Now h5 is impossible.}
+            e6 {White tries to smash your position open — but this pawn sacrifice is a mistake, and Stockfish rates Black better after it.}
+            Qd6 {Calm: the queen eyes g3 (a weak square after f3 and h4) and you will take back on f7 with the bishop.}
+            exf7+
+            Bxf7 {Black is better: White's kingside pawns are loose and White's king has no safe home.}` },
+        ],
+      },
+      {
+        name: 'Classical (3.Nc3 dxe4 4.Nxe4 Bf5)',
+        plan: 'Finish development: …e6, …Ngf6, …Be7 or …Bd6, …Qc7, and castle — usually kingside, or queenside if White castled kingside. You have no weaknesses. Later free yourself with …c5 or …e5.',
+        lines: [
+          { id: 'ck-cl-main', name: 'Main line 6.h4 h6 7.Nf3', pgn: `
+            e4 c6 d4 d5
+            Nc3 {White defends e4 with the knight.}
+            dxe4 {Take — e4 can't be held.}
+            Nxe4
+            Bf5 {Develop the bishop and hit the knight: development with tempo.}
+            Ng3 {The knight attacks your bishop.}
+            Bg6 {Step back; the bishop stays on its good diagonal.}
+            h4 {White threatens h5 to trap the bishop.}
+            [e6: Blunder! 7.h5 and your bishop on g6 is trapped — h7 is blocked by your own pawn and f5 is covered by the g3 knight.]
+            h6 {Make an escape square: after h5 the bishop goes to h7.}
+            Nf3
+            Nd7 {The knight goes to d7 (not f6 yet) so that if White plays Ne5, you can trade it off.}
+            h5
+            Bh7
+            Bd3 {White offers to trade the light-squared bishops.}
+            Bxd3 {Trade. Your bishop has done its job.}
+            Qxd3
+            e6 {Build the wall and free your f8 bishop.}
+            Bd2
+            Ngf6 {Develop. You will castle after …Be7.}
+            O-O-O
+            Be7 {Solid. Next …O-O or …Qc7 and …O-O-O. White has a little space, but you have no weaknesses.}` },
+          { id: 'ck-cl-bf4', name: 'Main line with 11.Bf4', pgn: `
+            e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6 h4 h6 Nf3 Nd7 h5 Bh7 Bd3 Bxd3 Qxd3 e6
+            Bf4 {The bishop takes the h2-b8 diagonal.}
+            Ngf6
+            O-O-O
+            Be7 {Develop and castle next. The same calm plan.}` },
+          { id: 'ck-cl-nf3', name: '6.Nf3 Nd7', pgn: `
+            e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6
+            Nf3 {White develops first.}
+            Nd7 {Same set-up: …Nd7, …e6, …Ngf6.}
+            Bd3 {White offers a bishop trade.}
+            e6 {Build the wall. If Bxg6 hxg6, your h-file opens for the rook.}` },
+          { id: 'ck-cl-bc4', name: '6.Bc4 e6', pgn: `
+            e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6
+            Bc4 {White's bishop aims at e6 and f7.}
+            e6 {Close the diagonal. Your pawn on e6 blunts the c4 bishop.}
+            N1e2
+            Nf6
+            Nf4
+            Bd6 {Challenge the f4 knight. Next …O-O and …Nbd7. Solid and equal.}` },
+          { id: 'ck-cl-nd2', name: '3.Nd2 — same plan', pgn: `
+            e4 c6 d4 d5
+            Nd2 {Another way to defend e4.}
+            dxe4 {Same answer.}
+            Nxe4
+            Bf5 {Exactly the same position as after 3.Nc3.}
+            Ng3 Bg6` },
+        ],
+      },
+      {
+        name: 'Exchange & Panov (3.exd5)',
+        plan: 'Exchange (4.Bd3): develop with …Nc6, …Nf6, …Bg4, …e6, …Bd6, castle, and play on the queenside with …Rc8 and the "minority attack" …b5-b4. Panov (4.c4): White gets an isolated d4 pawn — blockade it with a knight on d5, trade pieces, and attack it in the endgame.',
+        lines: [
+          { id: 'ck-ex-qb3', name: 'Exchange 4.Bd3 … 7.Qb3', pgn: `
+            e4 c6 d4 d5
+            exd5 {The Exchange Variation.}
+            cxd5 {Recapture with the c-pawn — this was the point of 1…c6. You keep a central pawn.}
+            Bd3 {White's bishop aims at h7.}
+            Nc6 {Develop and pressure d4.}
+            c3 {White supports d4.}
+            Nf6 {Develop and protect h7 and the d5 pawn.}
+            Bf4
+            Bg4 {Your bishop gets out to an active square, pinning against the queen idea Qd1.}
+            Qb3 {A double attack: b7 is undefended now that your bishop left c8, and d5 is hit too.}
+            Na5 {Hit the queen. Your knight comes back to c6 later.}
+            Qa4+
+            Bd7 {Block the check and the queen must move again.}
+            Qc2
+            e6 {Free the f8 bishop. Next …Bd6 to trade off White's strong f4 bishop, castle, and …Nc6. Equal.}` },
+          { id: 'ck-ex-nf3', name: 'Exchange 4.Bd3 … 6.Nf3', pgn: `
+            e4 c6 d4 d5 exd5 cxd5 Bd3 Nc6 c3 Nf6
+            Nf3 {White develops the knight first.}
+            Bg4 {Pin the knight — it is the best defender of d4 and e5.}
+            O-O
+            e6 {Free the f8 bishop. Next …Bd6, …O-O and …Qc7.}` },
+          { id: 'ck-panov-exd5', name: 'Panov 4.c4 — 7.cxd5', pgn: `
+            e4 c6 d4 d5 exd5 cxd5
+            c4 {The Panov Attack: White hits d5 and wants active piece play.}
+            Nf6 {Defend d5 and develop.}
+            Nc3
+            e6 {Defend d5 again and free your f8 bishop.}
+            Nf3
+            Be7 {Develop and prepare to castle.}
+            cxd5
+            Nxd5 {Take back with the knight — it blockades White's isolated d4 pawn.}
+            Bd3
+            Nc6 {Pressure on d4.}
+            O-O
+            O-O {Castle. Plan: trade pieces, then attack the lonely d4 pawn.}
+            Re1
+            Nf6 {Defend your kingside (and h7) with the knight. Next …b6, …Bb7 and …Rc8.}` },
+          { id: 'ck-panov-c5', name: 'Panov 4.c4 — 7.c5', pgn: `
+            e4 c6 d4 d5 exd5 cxd5 c4 Nf6 Nc3 e6 Nf3 Be7
+            c5 {White grabs queenside space instead.}
+            O-O {Castle first.}
+            Bd3
+            b6 {Attack the c5 pawn at once — undermine White's space.}
+            b4
+            a5 {Hit the b4 support pawn too. White's queenside pawns become targets.}` },
+        ],
+      },
+      {
+        name: 'Two Knights (2.Nc3 d5 3.Nf3)',
+        plan: 'You have traded your light bishop for a knight, so put your pawns on light squares (c6, d5, e6) and play solidly: …Nf6, …Nbd7, …Be7, castle. White has the bishop pair but no easy targets.',
+        lines: [
+          { id: 'ck-2n-d4', name: '4.h3 Bxf3 5.Qxf3 e6 6.d4', pgn: `
+            e4 c6
+            Nc3 {White develops first and keeps d2-d4 for later.}
+            d5 {Same idea — hit e4.}
+            Nf3 {The Two Knights.}
+            Bg4 {Develop the bishop and pin the f3 knight.}
+            h3 {Ask the bishop.}
+            Bxf3 {Take — your bishop for the knight.}
+            Qxf3
+            e6 {Build the wall; your pawns now sit on light squares.}
+            d4
+            Nf6
+            Bd3 {White gambits the d4 pawn for activity.}
+            dxe4
+            Nxe4
+            Qxd4 {Take the pawn: it's safe now.}
+            c3
+            Qd8 {Retreat to safety. You are a pawn up; finish developing and trade pieces.}` },
+          { id: 'ck-2n-d3', name: '4.h3 Bxf3 5.Qxf3 e6 6.d3', pgn: `
+            e4 c6 Nc3 d5 Nf3 Bg4 h3 Bxf3 Qxf3 e6
+            d3 {A quieter set-up.}
+            Nf6
+            Bd2
+            d4 {Gain space and kick the c3 knight.}
+            Ne2
+            c5 {Support the d4 pawn. Next …Nc6, …Be7, castle. A comfortable game.}` },
+        ],
+      },
+      {
+        name: 'White\'s early sidelines',
+        plan: 'White avoided the main lines. Keep it simple: …d5, develop, castle. Put pawns on light squares if you trade your light bishop.',
+        lines: [
+          { id: 'ck-c4', name: '2.c4', pgn: `
+            e4 c6
+            c4 {White plays c4 early.}
+            d5 {Still hit the centre.}
+            exd5
+            cxd5
+            cxd5
+            Nf6 {Develop first and win back d5 next move.}
+            Nc3
+            Nxd5 {Pawn back.}
+            Nf3
+            Nc6 {Free development and an equal game.}` },
+        ],
+      },
+    ],
+  },
 ];

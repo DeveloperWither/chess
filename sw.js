@@ -1,8 +1,8 @@
 // Offline support: keeps every app file on the device.
 // Bump VERSION whenever app files change so phones pick up the update.
-const VERSION = 'chess-studio-v9';
+const VERSION = 'chess-studio-v12';
 const FILES = [
-  './', 'index.html', 'style.css', 'app.js', 'openings.js', 'vision.js', 'endgames.js', 'firebase-config.js', 'online.js', 'chess.min.js', 'puzzles.json', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'app.js', 'openings.js', 'vision.js', 'endgames.js', 'train.js', 'tools.js', 'firebase-config.js', 'online.js', 'chess.min.js', 'puzzles.json', 'manifest.webmanifest',
   'engine/stockfish.wasm.js', 'engine/stockfish.wasm', 'stockfish.js',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
